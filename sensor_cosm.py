@@ -30,9 +30,11 @@ def main():
     onewire = OneWire()
     dht = DHT(22)
     while True:
-        print "-" * 80
         tmp36_temp = mcp3008.read_tmp36(0)
-        ds18b20_temp = onewire.get_ds18b20_temp(OW_SENSOR)
+        try:
+            ds18b20_temp = onewire.get_ds18b20_temp(OW_SENSOR)
+        except StandardError:
+            ds18b20_temp = None
         dht11 = dht.read_dht11()
         cpu_temp = float(int(open("/sys/class/thermal/thermal_zone0/temp", "r").read())/1000)
         pac = eeml.datastream.Cosm(API_URL, API_KEY)
@@ -43,8 +45,10 @@ def main():
             eeml.Data(3, dht11["humidity"]),
             eeml.Data(4, cpu_temp, unit=eeml.unit.Celsius()),
         ])
-        print pac
-        pac.put()
+        try:
+            pac.put()
+        except StandardError:
+            print "Exception on pac.put()"
         time.sleep(60)
 
 if __name__ == "__main__":
