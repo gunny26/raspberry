@@ -397,19 +397,12 @@ def main():
 
     # delay in ms (milliseconds) for phase change
     delay = 100.0
+    # maximum steps to move to get to the borders
     maxx = 256
     maxy = 256
     # first motor on
-    # a1=4
-    # a2=17
-    # b1=23
-    # b2=24
     motorx = BipolarStepperMotor((4, 17, 27, 22), delay, maxx)
     # second motor
-    # a1=27
-    # a2=22
-    # b1=10
-    # b2=9
     motory = BipolarStepperMotor((24, 25, 7, 8), delay, maxy)
     laser = Laser(14)
     # let controller handle these two motors
@@ -425,35 +418,27 @@ def main():
 
     key = ''
     while True:
-        logging.info("M-Position   : %s, %s" % (motorx.get_position(), motory.get_position()))
-        logging.info("M-X(min/max) : %s, %s" % (motorx.min_position, motorx.max_position))
-        logging.info("M-Y(min/max) : %s, %s" % (motory.min_position, motory.max_position))
-        logging.info("C-Position   : %s" % str(controller.get_position()))
-        logging.info("C-(min/max)  : %s" % str(controller.get_boundaries()))
-        logging.info("Press V to draw Circle")
-        logging.info("press X to got from min to max on X-Axis")
-        logging.info("press Y to got from min to max on Y-Axis")
- 
         line = raw_input("Please enter GCode Command:")
         # Code from http://hostcode.sourceforge.net/view/1086
         if line[0:3] == 'G90':
             print 'start'
         elif line[0:3] == 'G20':# working in inch;
+            logging.info("%s working in inch", line)
             dx /= 25.4
             dy /= 25.4
-            print 'Working in inch';
         elif line[0:3] == 'G21':# working in mm;
-            print 'Working in mm'
+            logging.info("%s Working in mm", line)
+        elif re.search("M?2 ", line):
+
         elif line[0:3] == 'M05':
+            logging.info("%s Motor Off", line)
             GPIO.output(Laser_switch,False)
-            print 'Laser turned off';
         elif line[0:3] == 'M03':
+            logging.info("%s Motor On", line)
             GPIO.output(Laser_switch,True)
-            print 'Laser turned on'
         elif line[0:3] == 'M02':
-            GPIO.output(Laser_switch,False);
-            print 'finished. shuting down'
-            break
+            logging.info("%s Complete Power Off", line)
+            GPIO.output(Laser_switch,False)
         elif (line[0:3]=='G1F') or (line[0:4]=='G1 F'):
             pass
         elif (line[0:3]=='G0 ') or (line[0:3]=='G1 ') or (line[0:3]=='G01'):#|(lines[0:3]=='G02')|(lines[0:3]=='G03'):
