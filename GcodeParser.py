@@ -15,22 +15,9 @@ import pygame
 Changelog
 
 problem in goto, to determine how many steps have to be done
+
+failure in get_center, something under sqrt goes negative
 """
-
-
-example_gcode = [
-"G17 G20 G90 G94 G54",
-"G0 Z0.25",
-"X-0.5 Y0.",
-"Z0.1",
-"G01 Z0. F5.",
-"G02 X0. Y0.5 I0.5 J0. F2.5",
-"X0.5 Y0. I0. J-0.5",
-"X0. Y-0.5 I-0.5 J0.",
-"X-0.5 Y0. I0. J0.5",
-"G01 Z0.1 F5.",
-"G00 X0. Y0. Z0.25"
-]
 
 
 class Motor(object):
@@ -53,8 +40,8 @@ class Motor(object):
         """
         move number of full integer steps
         """
-        logging.info("Moving Motor One steps in direction %s", direction)
-        logging.info("Motor accuracy %s +/- %s", self.position, self.float_position)
+        logging.debug("Moving Motor One steps in direction %s", direction)
+        logging.debug("Motor accuracy %s +/- %s", self.position, self.float_position)
         self.position += direction
 
     def unhold(self):
@@ -98,6 +85,14 @@ class Point3d(object):
         self.Y *= scalar
         self.Z *= scalar
 
+    def __div__(self, scalar):
+        return(Point3d(self.X / scalar, self.Y / scalar, self.Z / scalar))
+
+    def __idiv__(self, scalar):
+        self.X /= scalar
+        self.Y /= scalar
+        self.Z /= scalar
+
     def perpendicular_z(self):
         return(Point3d(-self.Y, self.X, self.Z))
 
@@ -118,6 +113,35 @@ class Point3d(object):
         y = self.x * sin + self.y * cos
         self.x = x
         self.y = y
+
+    def rotated(self, radians):
+        cos = math.cos(radians)
+        sin = math.sin(radians)
+        new_x = self.X * cos - self.Y * sin
+        new_y = self.X * sin + self.Y * cos
+        new_z = self.Z
+        return(Point3d(new_x, new_y, new_z))
+
+    def normalized(self):
+        max_value = max(abs(self.X), abs(self.Y), abs(self.Z))
+        if max_value == 0:
+            return(Point3d(0.0, 0.0, 0.0))
+        return(Point3d(self.X / max_value, self.Y / max_value, self.Z / max_value))
+
+    def doted(self, other):
+        return(self.X * other.X + self.Y * other.Y + self.Z * other.Z)
+
+    def angle(self):
+        add_angle = 0
+        if self.Y < 0 :
+            add_angle = math.pi
+        if self.X == 0.0:
+            return(math.atan(self.Y / 0.00001))
+        else:
+            return(math.atan(self.Y / self.X))
+
+    def angle_between(self, other):
+        return(math.acos(self.doted(other)))
 
 class Controller(object):
     """
@@ -238,43 +262,38 @@ class Controller(object):
         """Units per minute feed rate"""
         logging.info("%s called with %s", inspect.stack()[0][3], args)
 
-    def __to_angle(self, i, j):
+    def __to_angle(self, offset):
         """
         takes position i and j and returns angle
         """
-        angle = 0
-        if j < 0:
-            angle = math.pi
-        angle += math.acos(i)
-        return(angle)
+        logging.info("%s called with %s", inspect.stack()[0][3], offset)
+        if (offset.X == 0) and (offset.Y == 0):
+            return(math.pi * 2)
+        else:
+            angle = math.acos(offset.X)
+            if offset.Y <= 0:
+                angle += math.pi
+            return(angle)
 
-    def __get_center(self, point1, point2, radius):
-        """
-        return center point and i, j, k, points to point 1
-        """
-        logging.info("%s called with %s", inspect.stack()[0][3], (point1, point2, radius))
-        assert type(point1) == Point3d
-        assert type(point2) == Point3d
-        # calculate vector c between point a and point b
-        vector_c = (point1 - point2)
-        logging.info("vector_c=%s", vector_c)
-        # get height from vector c to center
-        logging.info("radius=%s", radius)
-        logging.info("length(vector_c)/2=%s", vector_c.length_z() / 2)
-        height = math.sqrt(radius ** 2 - (vector_c.length_z() ** 2 ) / 4)
-        # calculate point c
-        point_c = point1 + vector_c * 0.5 
-        # perpendicular to this point in distance r
-        vector_d = vector_c.perpendicular_z()
-        # get the unit vector of vector_d
-        vector_d_u = vector_d.unit_z()
-        # multiply with radius and add to point_c
-        center = point_c + vector_d_u * height
-        logging.info("Found center at %s", center)
-        ijk = point1 - center
-        logging.info("Vector from point to center %s", ijk)
-        return(ijk)
+    def __get_center(self, target, radius):
+        logging.info("%s called with %s", inspect.stack()[0][3], (target, radius))
+        d = target - self.position
+        x = d.X
+        y = d.Y
+        r = radius
+        logging.info("x=%s, y=%s, r=%s", x, y, r)
+        h_x2_div_d = math.sqrt(4 * r**2 - x**2 - y**2) / math.sqrt(x**2 + y**2)
+        i = (x - (y * h_x2_div_d))/2
+        j = (y + (x * h_x2_div_d))/2
+        return(Point3d(i, j, 0.0))
 
+    def float_iter(self, start, stop, stepsize):
+        steps = abs(stop - start) / stepsize
+        if stop < start and stepsize > 0:
+            stepsize = -stepsize
+        for _ in range(steps):
+            yield start
+            start += stepsize
 
     def __arc(self, *args):
         """
@@ -287,51 +306,55 @@ class Controller(object):
         TODO: Improve
         """
         logging.info("%s called with %s", inspect.stack()[0][3], args)
+        logging.info("Actual Position at %s", self.position)
         data = args[0]
         ccw = args[1]
-        x1 = data["X"]
-        y1 = data["Y"]
-        if "Z" in data:
-            z1 = data["Z"]
-        else:
-            z1 = self.position.Z
-        end_position = Point3d(x1, y1, z1)
-        i = j = k = 0.0
+        # correct some values if not specified
+        if "X" not in data: data["X"] = self.position.X
+        if "Y" not in data: data["Y"] = self.position.Y
+        if "Z" not in data: data["Z"] = self.position.Z
+        if "I" not in data: data["I"] = 0.0
+        if "J" not in data: data["J"] = 0.0
+        if "K" not in data: data["K"] = 0.0
+        target = Point3d(data["X"], data["Y"], data["Z"])
+        logging.info("Endpoint of arc at %s", target)
         # either R or IJK are given
+        offset = None
         if "R" in data:
-            ijk = self.__get_center(self.position, end_position, data["R"])
-            i = ijk.X
-            j = ijk.Y
-            k = ijk.Z
+            offset = self.__get_center(target, data["R"])
         else:
-            i = data["I"]
-            j = data["J"]
-            if "K" in data:
-                k = data["K"]
-        center = Point3d(self.position.X+i, self.position.Y+j, self.position.Z+k)
-        radius = math.sqrt(x1 ** 2 + y1 ** 2)
-        start_angle = self.__to_angle(i / radius, j / radius)
-        stop_angle = self.__to_angle(x1 / radius, y1 / radius)
-        arc_step = math.pi / 180
-        angle_steps = abs(int((start_angle - stop_angle) / arc_step))
-        logging.info("Actual Position at %s", self.position)
+            offset = Point3d(data["I"], data["J"], data["K"])
+        logging.info("Offset = %s", offset)
+        center = self.position + offset
         logging.info("Center of arc at %s", center)
-        logging.info("Endpoint of arc at %s", end_position)
+        radius = offset.length_z()
         logging.info("Radius: %s", radius)
+        # get the angle bewteen the two vectors
+        target_vec = (center - target).normalized()
+        logging.info("target_vec : %s; angle %s", target_vec, target_vec.angle())
+        position_vec = (center - self.position).normalized()
+        logging.info("position_vec : %s; angle %s", position_vec, position_vec.angle())
+        angle = math.acos(target_vec.doted(position_vec))
+        logging.info("angle between target and position is %s", target_vec.angle_between(position_vec))
+        # old version
+        #start_angle = self.__to_angle((center - self.position) / radius)
+        #stop_angle = self.__to_angle((center - target) / radius)
+        start_angle = target_vec.angle()
+        stop_angle = position_vec.angle()
+        if start_angle == stop_angle:
+            stop_angle += math.pi*2
         logging.info("Arc from %s rad to %s rad", start_angle, stop_angle)
-        logging.info("needing %d steps of %s rad", angle_steps, arc_step)
-        direction = 1
-        # in wich direction should i count the angle up
-        if start_angle < stop_angle:
-            direction = -1
+        angle_step = ccw * math.pi / 180 
+        angle_steps = abs(int((start_angle - stop_angle) / angle_step))
+        logging.info("needing %d steps of %s rad", angle_steps, angle_step)
         angle = start_angle
+        inv_offset = offset * -1
         for _ in range(angle_steps):
             # if G02 counter clockwise
-            newposition = Point3d(radius * math.cos(angle), radius * math.sin(angle))
-            self.__goto(newposition + center)
-            logging.debug("Angle %s rad position %s", angle, newposition)
-            angle += arc_step * direction * ccw
-        logging.info("Actual Position %s should be %s", self.position, end_position)
+            newposition = center + inv_offset.rotated(angle)
+            self.__goto(newposition)
+            angle += angle_step
+        logging.info("Actual Position %s should be %s", self.position, target)
 
     def __step(self, *args):
         """
@@ -374,11 +397,11 @@ class Controller(object):
     def pygame_update(self, newposition):
         centerx = surface.get_width() / 2
         centery = surface.get_height() / 2
-        zoom = 100
+        zoom = 50
         color = pygame.Color(255, 255, 255, 255)
-        start = (zoom * self.position.X + centerx, zoom * self.position.Y + centery)
-        stop = (zoom * newposition.X + centerx, zoom * newposition.Y + centery)
-        logging.info("Line from %s to %s", start, stop)
+        start = (zoom * self.position.X + centerx, centery - zoom * self.position.Y)
+        stop = (zoom * newposition.X + centerx, centery - zoom * newposition.Y)
+        logging.debug("Line from %s to %s", start, stop)
         pygame.draw.line(surface, pygame.Color(255, 255, 255, 255), start, stop, 1)
         pygame.display.flip()
 
@@ -468,11 +491,14 @@ class Parser(object):
         method_to_call(args)
 
     def read(self):
-        for line in open("simple.ngc", "rb"):
+        for line in open("circular_pocket.gcode", "rb"):
+            line = line.strip()
+            line = line.upper()
+            if len(line) == 0: continue
+            if line[0] in ("%", "(") : continue
             logging.info("-" * 80)
             # controller
             # some status variables
-            line = line.upper()
             logging.info("parsing %s", line)
             gg = re.findall("([g|G][\d|\.]+\D)", line)
             if len(gg) > 1:
