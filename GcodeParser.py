@@ -49,6 +49,9 @@ class Motor(object):
 
 
 class Point3d(object):
+    """
+    three dimension vetor representation
+    """
 
     def __init__(self, x=0.0, y=0.0, z=0.0):
         self.X = float(x)
@@ -93,20 +96,27 @@ class Point3d(object):
         self.Y /= scalar
         self.Z /= scalar
 
-    def perpendicular_z(self):
+    def perpendicular2d(self):
+        """
+        return perpendicular vetor in XY Plane
+        """
         return(Point3d(-self.Y, self.X, self.Z))
 
-    def length_z(self):
-        # get length in X-Y plane
+    def length2d(self):
+        """
+        return length in XY Plane
+        """
         length = math.sqrt(self.X ** 2 + self.Y ** 2)
         return(length)
 
-    def unit_z(self):
-        """ return unit vector in X-Y Plane """
-        length = self.length_z()
+    def unit2d(self):
+        """
+        return unit vector in XY Plane
+        """
+        length = self.length2d()
         return(Point3d(self.X / length, self.Y / length, self.Z / length))
 
-    def rotate_around_z(self, radians):
+    def rotate2d(self, radians):
         cos = math.cos(radians)
         sin = math.sin(radians)
         x = self.x * cos - self.y * sin
@@ -114,7 +124,10 @@ class Point3d(object):
         self.x = x
         self.y = y
 
-    def rotated(self, radians):
+    def rotated2d(self, radians):
+        """
+        rotate self number of radians clockwise, and return new object
+        """
         cos = math.cos(radians)
         sin = math.sin(radians)
         new_x = self.X * cos - self.Y * sin
@@ -123,24 +136,35 @@ class Point3d(object):
         return(Point3d(new_x, new_y, new_z))
 
     def normalized(self):
+        """
+        normalize -> the greteast value = 1 all other are scaled
+        """
         max_value = max(abs(self.X), abs(self.Y), abs(self.Z))
         if max_value == 0:
             return(Point3d(0.0, 0.0, 0.0))
         return(Point3d(self.X / max_value, self.Y / max_value, self.Z / max_value))
 
     def doted(self, other):
+        """
+        Dot Product of two vectors with the same number of items
+        """
         return(self.X * other.X + self.Y * other.Y + self.Z * other.Z)
 
     def angle(self):
+        """
+        which angle does this vector has, from his origin
+        """
         add_angle = 0
+        # corect angle if in 3rd or 4th quadrant
         if self.Y < 0 :
-            add_angle = math.pi
-        if self.X == 0.0:
-            return(math.atan(self.Y / 0.00001))
+            return(2 * math.pi - math.acos(self.X))
         else:
-            return(math.atan(self.Y / self.X))
+            return(math.acos(self.X))
 
     def angle_between(self, other):
+        """
+        angle between self and other vector
+        """
         return(math.acos(self.doted(other)))
 
 class Controller(object):
@@ -167,6 +191,10 @@ class Controller(object):
         self.step_factor = int(256 / 32)
         # motors dict
         self.motors = {}
+        # pygame specificas to draw correct
+        self.pygame_zoom = 2
+        self.pygame_draw = True
+        self.pygame_color = pygame.Color(255,255,255,255) 
 
     def get_direction(self, number):
         """get direction of number"""
@@ -182,6 +210,7 @@ class Controller(object):
         """rapid motion with maximum speed"""
         logging.info("%s called with %s", inspect.stack()[0][3], args)
         data = args[0]
+        self.pygame_color = pygame.Color(50, 50, 50, 255)
         self.move(data)
     G0 = G00
 
@@ -189,6 +218,7 @@ class Controller(object):
         """linear motion with given speed"""
         logging.info("%s called with %s", inspect.stack()[0][3], args)
         data = args[0]
+        self.pygame_color = pygame.Color(0, 128, 0, 255)
         self.set_speed(data)
         self.move(data)
     G1 = G01
@@ -197,6 +227,7 @@ class Controller(object):
         """clockwise helical motion"""
         logging.info("%s called with %s", inspect.stack()[0][3], args)
         data = args[0]
+        self.pygame_color = pygame.Color(0, 0, 255, 255)
         if "F" not in data:
             data["F"] = self.default_speed
         if "P" not in data:
@@ -209,6 +240,7 @@ class Controller(object):
         """counterclockwise helical motion"""
         logging.info("%s called with %s", inspect.stack()[0][3], args)
         data = args[0]
+        self.pygame_color = pygame.Color(0, 255, 255, 255)
         if "F" not in data:
             data["F"] = self.default_speed
         if "P" not in data:
@@ -327,31 +359,49 @@ class Controller(object):
         logging.info("Offset = %s", offset)
         center = self.position + offset
         logging.info("Center of arc at %s", center)
-        radius = offset.length_z()
+        radius = offset.length2d()
         logging.info("Radius: %s", radius)
         # get the angle bewteen the two vectors
-        target_vec = (center - target).normalized()
+        target_vec = (target - center).normalized()
         logging.info("target_vec : %s; angle %s", target_vec, target_vec.angle())
-        position_vec = (center - self.position).normalized()
+        position_vec = (self.position - center).normalized()
         logging.info("position_vec : %s; angle %s", position_vec, position_vec.angle())
         angle = math.acos(target_vec.doted(position_vec))
         logging.info("angle between target and position is %s", target_vec.angle_between(position_vec))
         # old version
         #start_angle = self.__to_angle((center - self.position) / radius)
         #stop_angle = self.__to_angle((center - target) / radius)
-        start_angle = target_vec.angle()
-        stop_angle = position_vec.angle()
+        start_angle = None
+        stop_angle = None
+        angle_step = math.pi / 180
+        if ccw == 1:
+            # should go from target to position, so target sould be smaller
+            if target_vec.angle() > position_vec.angle():
+                start_angle = target_vec.angle()
+                stop_angle = position_vec.angle() + math.pi * 2 
+            else:
+                start_angle = target_vec.angle()
+                stop_angle = position_vec.angle()
+        else:
+            # so clockwise, step must be negative
+            angle_step = -angle_step
+            # should go from position to target
+            if position_vec.angle() < target_vec.angle():
+                start_angle = position_vec.angle()
+                stop_angle = target_vec.angle() + math.pi * 2
+            else:
+                start_angle = position_vec.angle()
+                stop_angle = target_vec.angle()
+        # this indicates a full circle
         if start_angle == stop_angle:
             stop_angle += math.pi*2
-        logging.info("Arc from %s rad to %s rad", start_angle, stop_angle)
         angle_step = ccw * math.pi / 180 
         angle_steps = abs(int((start_angle - stop_angle) / angle_step))
-        logging.info("needing %d steps of %s rad", angle_steps, angle_step)
+        logging.info("Arc from %s rad to %s rad wtih %s steps in %s radians", start_angle, stop_angle, angle_steps, angle_step)
         angle = start_angle
         inv_offset = offset * -1
         for _ in range(angle_steps):
-            # if G02 counter clockwise
-            newposition = center + inv_offset.rotated(angle)
+            newposition = center + inv_offset.rotated2d(angle)
             self.__goto(newposition)
             angle += angle_step
         logging.info("Actual Position %s should be %s", self.position, target)
@@ -397,12 +447,12 @@ class Controller(object):
     def pygame_update(self, newposition):
         centerx = surface.get_width() / 2
         centery = surface.get_height() / 2
-        zoom = 50
         color = pygame.Color(255, 255, 255, 255)
-        start = (zoom * self.position.X + centerx, centery - zoom * self.position.Y)
-        stop = (zoom * newposition.X + centerx, centery - zoom * newposition.Y)
+        start = (self.pygame_zoom * self.position.X + centerx, centery - self.pygame_zoom * self.position.Y)
+        stop = (self.pygame_zoom * newposition.X + centerx, centery - self.pygame_zoom * newposition.Y)
         logging.debug("Line from %s to %s", start, stop)
-        pygame.draw.line(surface, pygame.Color(255, 255, 255, 255), start, stop, 1)
+        if self.pygame_draw:
+            pygame.draw.line(surface, self.pygame_color, start, stop, 1)
         pygame.display.flip()
 
     def set_speed(self, *args):
@@ -491,12 +541,17 @@ class Parser(object):
         method_to_call(args)
 
     def read(self):
-        for line in open("circular_pocket.gcode", "rb"):
+        for line in open("simple_circle.gcode", "rb"):
             line = line.strip()
             line = line.upper()
+            # filter out some incorrect lines
             if len(line) == 0: continue
-            if line[0] in ("%", "(") : continue
+            if line[0] == "%": continue
+            # start of parsing
             logging.info("-" * 80)
+            if line[0] == "(":
+                logging.info("Comment: %s", line[1:])
+                continue
             # controller
             # some status variables
             logging.info("parsing %s", line)
