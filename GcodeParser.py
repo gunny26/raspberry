@@ -1,4 +1,5 @@
 #/usr/bin/python
+# -*- coding: utf-8 -*-
 #
 # parse Gcode
 #
@@ -102,21 +103,89 @@ class Point3d(object):
         """
         return(Point3d(-self.Y, self.X, self.Z))
 
-    def length2d(self):
+    def length(self):
+        return(math.sqrt(self.X**2 + self.Y**2 + self.Z**2))
+
+    def __old__length2d(self):
         """
-        return length in XY Plane
+        DEPRECATED return length in XY Plane
         """
         length = math.sqrt(self.X ** 2 + self.Y ** 2)
         return(length)
 
-    def unit2d(self):
+    def unit(self):
+        length = self.length()
+        return(Point3d(self.X / length, self.Y / length, self.Z / length))
+
+    def __old_unit2d(self):
         """
-        return unit vector in XY Plane
+        DEPRECATED return unit vector in XY Plane
         """
         length = self.length2d()
         return(Point3d(self.X / length, self.Y / length, self.Z / length))
 
-    def rotate2d(self, radians):
+    def product(self, other):
+        """
+        returns the cross product of self with other
+        a = self
+        b = other
+
+        cx = ay * bz - az * by
+        cy = az * bx - ax * bz
+        cz = ax * by - ay * bx
+        
+        the returned vector is orthogonal to the plan a,b
+        """
+        cx = self.Y * other.Z - self.Z * other.Y
+        cy = self.Z * other.X - self.X * other.Z
+        cz = self.X * other.Y - self.Y * other.X
+        return(Point3d(xy, cy, cz))
+
+
+    def rotated_Z(self, theta):
+        """
+        return rotated version of self around Z-Axis
+        theta should be given in radians
+        http://stackoverflow.com/questions/14607640/rotating-a-vector-in-3d-space
+        |cos θ   -sin θ   0| |x|   |x cos θ - y sin θ|   |x'|
+        |sin θ    cos θ   0| |y| = |x sin θ + y cos θ| = |y'|
+        |  0       0      1| |z|   |        z        |   |z'|
+        """
+        xr = self.X * math.cos(theta) - self.Y * math.sin(theta)
+        yr = self.X * math.sin(theta) + self.Y * math.cos(theta)
+        zr = self.Z
+        return(Point3d(xr, yr, zr))
+
+    def rotated_Y(self, theta):
+        """
+        return rotated version of self around Y-Axis
+        theta should be given in radians
+        http://stackoverflow.com/questions/14607640/rotating-a-vector-in-3d-space
+        | cos θ    0   sin θ| |x|   | x cos θ + z sin θ|   |x'|
+        |   0      1       0| |y| = |         y        | = |y'|
+        |-sin θ    0   cos θ| |z|   |-x sin θ + z cos θ|   |z'|
+        """
+        xr = self.X * math.cos(theta) + self.Z * math.sin(theta)
+        yr = self.Y
+        zr = (-1) * self.X * math.sin(theta) + self.Z * math.cos(theta)
+        return(Point3d(xr, yr, zr))
+
+    def rotated_X(self, theta):
+        """
+        return rotated version of self around X-Axis
+        theta should be given in radians
+        http://stackoverflow.com/questions/14607640/rotating-a-vector-in-3d-space
+        |1     0           0| |x|   |        x        |   |x'|
+        |0   cos θ    -sin θ| |y| = |y cos θ - z sin θ| = |y'|
+        |0   sin θ     cos θ| |z|   |y sin θ + z cos θ|   |z'|
+        """
+        xr = self.X
+        yr = self.Y * math.cos(theta) - self.Z * math.sin(theta)
+        zr = self.Y * math.sin(theta) + self.Z * math.cos(theta)
+        return(Point3d(xr, yr, zr))
+
+    def _old_rotate2d(self, radians):
+        """ DEPRECATED """
         cos = math.cos(radians)
         sin = math.sin(radians)
         x = self.x * cos - self.y * sin
@@ -124,7 +193,7 @@ class Point3d(object):
         self.x = x
         self.y = y
 
-    def rotated2d(self, radians):
+    def _old_rotated2d(self, radians):
         """
         rotate self number of radians clockwise, and return new object
         """
@@ -135,7 +204,7 @@ class Point3d(object):
         new_z = self.Z
         return(Point3d(new_x, new_y, new_z))
 
-    def normalized(self):
+    def _old_normalized(self):
         """
         normalize -> the greteast value = 1 all other are scaled
         """
@@ -144,7 +213,7 @@ class Point3d(object):
             return(Point3d(0.0, 0.0, 0.0))
         return(Point3d(self.X / max_value, self.Y / max_value, self.Z / max_value))
 
-    def doted(self, other):
+    def dot(self, other):
         """
         Dot Product of two vectors with the same number of items
         """
@@ -165,7 +234,7 @@ class Point3d(object):
         """
         angle between self and other vector
         """
-        return(math.acos(self.doted(other)))
+        return(math.acos(self.dot(other)))
 
 class Controller(object):
     """
@@ -192,9 +261,10 @@ class Controller(object):
         # motors dict
         self.motors = {}
         # pygame specificas to draw correct
-        self.pygame_zoom = 2
+        self.pygame_zoom = 0.5
         self.pygame_draw = True
         self.pygame_color = pygame.Color(255,255,255,255) 
+        self.draw_grid()
 
     def get_direction(self, number):
         """get direction of number"""
@@ -294,6 +364,38 @@ class Controller(object):
         """Units per minute feed rate"""
         logging.info("%s called with %s", inspect.stack()[0][3], args)
 
+    def M2(self, *args):
+        logging.debug("%s called with %s", inspect.stack()[0][3], args)
+        logging.info("M2 end the program")
+
+    def M3(self, *args):
+        logging.debug("%s called with %s", inspect.stack()[0][3], args)
+        logging.info("M3 start the spindle clockwise at the speed S")
+
+    def M4(self, *args):
+        logging.debug("%s called with %s", inspect.stack()[0][3], args)
+        logging.info("M4 start the spindle counter-clockwise at the speed S")
+
+    def M5(self, *args):
+        logging.debug("%s called with %s", inspect.stack()[0][3], args)
+        logging.info("M5 stop the spindle")
+
+    def M6(self, *args):
+        logging.debug("%s called with %s", inspect.stack()[0][3], args)
+        logging.info("M6 Tool change")
+
+    def M7(self, *args):
+        logging.debug("%s called with %s", inspect.stack()[0][3], args)
+        logging.info("M7 turn mist coolant on")
+
+    def M8(self, *args):
+        logging.debug("%s called with %s", inspect.stack()[0][3], args)
+        logging.info("M8 turn flood coolant on")
+
+    def M9(self, *args):
+        logging.debug("%s called with %s", inspect.stack()[0][3], args)
+        logging.info("M9 turn all coolant off")
+
     def __to_angle(self, offset):
         """
         takes position i and j and returns angle
@@ -359,52 +461,57 @@ class Controller(object):
         logging.info("Offset = %s", offset)
         center = self.position + offset
         logging.info("Center of arc at %s", center)
-        radius = offset.length2d()
+        radius = offset.length()
         logging.info("Radius: %s", radius)
         # get the angle bewteen the two vectors
-        target_vec = (target - center).normalized()
+        target_vec = (target - center).unit()
         logging.info("target_vec : %s; angle %s", target_vec, target_vec.angle())
-        position_vec = (self.position - center).normalized()
+        position_vec = (self.position - center).unit()
         logging.info("position_vec : %s; angle %s", position_vec, position_vec.angle())
-        angle = math.acos(target_vec.doted(position_vec))
+        angle = target_vec.angle_between(position_vec)
         logging.info("angle between target and position is %s", target_vec.angle_between(position_vec))
-        # old version
-        #start_angle = self.__to_angle((center - self.position) / radius)
-        #stop_angle = self.__to_angle((center - target) / radius)
         start_angle = None
         stop_angle = None
         angle_step = math.pi / 180
         if ccw == 1:
-            # should go from target to position, so target sould be smaller
-            if target_vec.angle() > position_vec.angle():
-                start_angle = target_vec.angle()
-                stop_angle = position_vec.angle() + math.pi * 2 
+            # G3 movement
+            # angle step will be added
+            # target angle should be greater than position angle
+            # if not so correct target_angle = 2 * math.pi - target_angle 
+            if target_vec.angle() < position_vec.angle():
+                start_angle = position_vec.angle()
+                stop_angle = 2 * math.pi - target_vec.angle()
             else:
-                start_angle = target_vec.angle()
-                stop_angle = position_vec.angle()
+                start_angle = position_vec.angle()
+                stop_angle = target_vec.angle()
         else:
+            # G2 movement
             # so clockwise, step must be negative
+            # target angle should be smaller than position angle
+            # if not correct target_angle = 2 * math.pi - target_angle
             angle_step = -angle_step
             # should go from position to target
-            if position_vec.angle() < target_vec.angle():
+            if target_vec.angle() > position_vec.angle():
                 start_angle = position_vec.angle()
-                stop_angle = target_vec.angle() + math.pi * 2
+                stop_angle = 2 * math.pi - target_vec.angle()
             else:
                 start_angle = position_vec.angle()
                 stop_angle = target_vec.angle()
         # this indicates a full circle
         if start_angle == stop_angle:
-            stop_angle += math.pi*2
-        angle_step = ccw * math.pi / 180 
+            stop_angle += math.pi * 2
         angle_steps = abs(int((start_angle - stop_angle) / angle_step))
         logging.info("Arc from %s rad to %s rad wtih %s steps in %s radians", start_angle, stop_angle, angle_steps, angle_step)
-        angle = start_angle
+        angle = 0
         inv_offset = offset * -1
+        logging.error("Inverse Offset vector : %s", inv_offset)
         for _ in range(angle_steps):
-            newposition = center + inv_offset.rotated2d(angle)
+            newposition = center + inv_offset.rotated_Z(angle)
             self.__goto(newposition)
             angle += angle_step
-        logging.info("Actual Position %s should be %s", self.position, target)
+        if self.position != target:
+            logging.error("Actual Position %s should be %s, correcting", self.position, target)
+            self.position = target
 
     def __step(self, *args):
         """
@@ -443,6 +550,16 @@ class Controller(object):
             self.__step({ "X":step_x, "Y":step_y, "Z":step_z})
         self.pygame_update(newposition)
         self.position = newposition
+
+    def draw_grid(self):
+        color = pygame.Color(0, 50, 0, 255)
+        for x in range(0, surface.get_height(), 10):
+            pygame.draw.line(surface, color, (x, 0), (x, surface.get_height()), 1)
+        for y in range(0, surface.get_width(), 10):
+            pygame.draw.line(surface, color, (0, y), (surface.get_width(), y), 1)
+        color = pygame.Color(0, 100, 0, 255)
+        pygame.draw.line(surface, color, (surface.get_width() / 2, 0), (surface.get_width() / 2, surface.get_height()))
+        pygame.draw.line(surface, color, (0, surface.get_height() / 2), (surface.get_width(), surface.get_height() / 2))
 
     def pygame_update(self, newposition):
         centerx = surface.get_width() / 2
@@ -533,6 +650,7 @@ class Parser(object):
         return(result)
 
     def caller(self, methodname=None, args=None):
+        logging.info("Methodname = %s" % methodname)
         if methodname is None:
             methodname = self.last_g_code
         else:
@@ -541,7 +659,7 @@ class Parser(object):
         method_to_call(args)
 
     def read(self):
-        for line in open("simple_circle.gcode", "rb"):
+        for line in open("spiral.ngc", "rb"):
             line = line.strip()
             line = line.upper()
             # filter out some incorrect lines
@@ -555,21 +673,28 @@ class Parser(object):
             # controller
             # some status variables
             logging.info("parsing %s", line)
-            gg = re.findall("([g|G][\d|\.]+\D)", line)
-            if len(gg) > 1:
-                logging.debug("Multiple G-Codes on one line detected")
-                for g_code in gg:
-                    g_code = g_code.strip()
-                    logging.info("Found %s", g_code)
-                    self.caller(g_code)
-            elif len(gg) == 1:
-                # G Command
-                g_code = gg[0].strip()
-                logging.debug("Only one G-Code %s detected", g_code)
-                result = self.parse_xyzijf(line)
-                self.caller(g_code, result)
+            mcodes = re.findall("([m|M][\d|\.]+\D?)", line)
+            if len(mcodes) == 1:
+                mcode = mcodes[0].strip()
+                self.caller(mcode)
+                continue
             else:
-                logging.debug("No G-Code on this line assuming %s" % self.last_g_code)
+                logging.error("There should only be one M-Code in one line")
+            gcodes = re.findall("([g|G][\d|\.]+\D)", line)
+            if len(gcodes) > 1:
+                logging.debug("Multiple G-Codes on one line detected")
+                for gcode in gcodes:
+                    gcode = gcode.strip()
+                    logging.info("Found %s", gcode)
+                    self.caller(gcode)
+            elif len(gcodes) == 1:
+                # G Command
+                gcode = gcodes[0].strip()
+                logging.debug("Only one G-Code %s detected", gcode)
+                result = self.parse_xyzijf(line)
+                self.caller(gcode, result)
+            else:
+                logging.debug("No G-Code on this line assuming last modal G-Code %s" % self.last_g_code)
                 result = self.parse_xyzijf(line)
                 self.caller(methodname=None, args=result)
             pygame.display.flip()
