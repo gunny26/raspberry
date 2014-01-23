@@ -49,6 +49,33 @@ class Motor(object):
         logging.info("Unholding Motor Coils")
 
 
+class Spindle(object):
+    """Abstract Class for Spindle
+    Spindle can rotate clockwise or counterclockwise
+    in given Speed
+    """
+
+    CW = -1 # clockwise direction
+    CCW = 1 # counter clockwise direction
+
+    def __init__(self, speed=1.0):
+        self.speed = speed
+
+    def rotate(self, direction, speed=None):
+        """
+        turn on spindle and rotate in direction with speed
+        """
+        if speed is None:
+            speed = self.speed
+        logging.info("Turn Spindle in Direction %s with speed %s", direction, speed)
+        
+    def unhold(self):
+        """
+        power off Spindle
+        """
+        logging.info("Power Off Spindle")
+
+
 class Point3d(object):
     """
     three dimension vetor representation
@@ -272,6 +299,10 @@ class Controller(object):
         if number == 0 : return 0
         if number > 0 : return 1
 
+    def add_spindle(self, spindle_object):
+        """ add spindle to controller """
+        self.spindle = spindle_object
+
     def add_motor(self, axis, motor_object):
         """ add specific axis motor to controller """
         self.motors[axis] = motor_object
@@ -371,14 +402,26 @@ class Controller(object):
     def M3(self, *args):
         logging.debug("%s called with %s", inspect.stack()[0][3], args)
         logging.info("M3 start the spindle clockwise at the speed S")
-
+        data = args[0]
+        if "S" not in data :
+            self.spindle.rotate(self.spindle.CW)
+        else:
+            self.spindle.rotate(self.spindle.CW, data["S"])
+            
     def M4(self, *args):
         logging.debug("%s called with %s", inspect.stack()[0][3], args)
         logging.info("M4 start the spindle counter-clockwise at the speed S")
+        data = args[0]
+        if "S" not in data :
+            self.spindle.rotate(self.spindle.CCW)
+        else:
+            self.spindle.rotate(self.spindle.CCW, data["S"])
 
     def M5(self, *args):
         logging.debug("%s called with %s", inspect.stack()[0][3], args)
         logging.info("M5 stop the spindle")
+        data = args[0]
+        self.spindle.unhold()
 
     def M6(self, *args):
         logging.debug("%s called with %s", inspect.stack()[0][3], args)
@@ -504,14 +547,19 @@ class Controller(object):
         logging.info("Arc from %s rad to %s rad wtih %s steps in %s radians", start_angle, stop_angle, angle_steps, angle_step)
         angle = 0
         inv_offset = offset * -1
-        logging.error("Inverse Offset vector : %s", inv_offset)
+        logging.error("Inverse Offset vector : %s", inv_offset) 
         for _ in range(angle_steps):
             newposition = center + inv_offset.rotated_Z(angle)
             self.__goto(newposition)
             angle += angle_step
+        # there is almost always a minimal gap to target angle,
+        # lets do this last rotation exactly
+        newposition = center + inv_offset.rotated_Z(angle)
+        self.__goto(newposition)
+        logging.info("stoping at angle %s, should be %s", start_angle + angle, stop_angle)
         if self.position != target:
             logging.error("Actual Position %s should be %s, correcting", self.position, target)
-            self.position = target
+            self.__goto(target)
 
     def __step(self, *args):
         """
@@ -638,11 +686,21 @@ class Parser(object):
         self.controller.add_motor("X", Motor())
         self.controller.add_motor("Y", Motor())
         self.controller.add_motor("Z", Motor())
+        self.controller.add_spindle(Spindle())
         self.last_g_code = None
 
-    def parse_xyzijf(self, line):
+    def parse_g_params(self, line):
         result = {}
         parameters = ("X", "Y", "Z", "F", "I", "J", "K", "P", "R")
+        for parameter in parameters:
+            match = re.search("%s([\+\-]?[\d\.]+)\D?" % parameter, line)
+            if match:
+                result[parameter] = float(match.group(1))
+        return(result)
+
+    def parse_m_params(self, line):
+        result = {}
+        parameters = ("S")
         for parameter in parameters:
             match = re.search("%s([\+\-]?[\d\.]+)\D?" % parameter, line)
             if match:
@@ -670,16 +728,17 @@ class Parser(object):
             if line[0] == "(":
                 logging.info("Comment: %s", line[1:])
                 continue
-            # controller
-            # some status variables
             logging.info("parsing %s", line)
+            # search for M-Codes
             mcodes = re.findall("([m|M][\d|\.]+\D?)", line)
             if len(mcodes) == 1:
                 mcode = mcodes[0].strip()
-                self.caller(mcode)
+                parameters = self.parse_m_params(line)
+                self.caller(mcode, parameters)
                 continue
-            else:
+            elif len(mcodes) > 1:
                 logging.error("There should only be one M-Code in one line")
+            # search for G-Codes
             gcodes = re.findall("([g|G][\d|\.]+\D)", line)
             if len(gcodes) > 1:
                 logging.debug("Multiple G-Codes on one line detected")
@@ -688,11 +747,10 @@ class Parser(object):
                     logging.info("Found %s", gcode)
                     self.caller(gcode)
             elif len(gcodes) == 1:
-                # G Command
                 gcode = gcodes[0].strip()
                 logging.debug("Only one G-Code %s detected", gcode)
-                result = self.parse_xyzijf(line)
-                self.caller(gcode, result)
+                parameters = self.parse_g_params(line)
+                self.caller(gcode, parameters)
             else:
                 logging.debug("No G-Code on this line assuming last modal G-Code %s" % self.last_g_code)
                 result = self.parse_xyzijf(line)
