@@ -11,6 +11,13 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 import inspect
 import math
 import pygame
+import time
+
+# wait for keypress, or wait amount of time
+# AUTOMATIC = None
+AUTOMATIC = 0.01
+# pygame Zoom faktor
+ZOOM = 4
 
 """
 Changelog
@@ -288,7 +295,7 @@ class Controller(object):
         # motors dict
         self.motors = {}
         # pygame specificas to draw correct
-        self.pygame_zoom = 0.5
+        self.pygame_zoom = ZOOM
         self.pygame_draw = True
         self.pygame_color = pygame.Color(255,255,255,255) 
         self.draw_grid()
@@ -717,7 +724,7 @@ class Parser(object):
         method_to_call(args)
 
     def read(self):
-        for line in open("spiral.ngc", "rb"):
+        for line in open("output_0001.ngc", "rb"):
             line = line.strip()
             line = line.upper()
             # filter out some incorrect lines
@@ -756,7 +763,10 @@ class Parser(object):
                 result = self.parse_xyzijf(line)
                 self.caller(methodname=None, args=result)
             pygame.display.flip()
-            while (pygame.event.wait().type != pygame.KEYDOWN): pass
+            if AUTOMATIC is not None:
+                time.sleep(AUTOMATIC)
+            else:
+                while (pygame.event.wait().type != pygame.KEYDOWN): pass
         while (pygame.event.wait().type != pygame.KEYDOWN): pass
 
 
