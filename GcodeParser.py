@@ -31,7 +31,7 @@ failure in get_center, something under sqrt goes negative
 class Motor(object):
     """Abstract Class for Motor"""
 
-    def __init__(self):
+    def __init__(self, max_steps=256, interstep_pause=4):
         self.float_position = 0.0
         self.position = 0
 
@@ -48,9 +48,10 @@ class Motor(object):
         """
         move number of full integer steps
         """
-        logging.debug("Moving Motor One steps in direction %s", direction)
-        logging.debug("Motor accuracy %s +/- %s", self.position, self.float_position)
+        logging.debug("Moving Motor One step in direction %s", direction)
+        logging.debug("Motor accuracy +/- %s", self.position - self.float_position)
         self.position += direction
+        time.sleep(0.0001)
 
     def unhold(self):
         logging.info("Unholding Motor Coils")
@@ -91,7 +92,7 @@ class Point3d(object):
     def __init__(self, x=0.0, y=0.0, z=0.0):
         self.X = float(x)
         self.Y = float(y)
-        self.Z= float(z)
+        self.Z = float(z)
 
     def __repr__(self):
         return("Point3d(%s, %s, %s)" % (self.X, self.Y, self.Z))
@@ -140,22 +141,9 @@ class Point3d(object):
     def length(self):
         return(math.sqrt(self.X**2 + self.Y**2 + self.Z**2))
 
-    def __old__length2d(self):
-        """
-        DEPRECATED return length in XY Plane
-        """
-        length = math.sqrt(self.X ** 2 + self.Y ** 2)
-        return(length)
 
     def unit(self):
         length = self.length()
-        return(Point3d(self.X / length, self.Y / length, self.Z / length))
-
-    def __old_unit2d(self):
-        """
-        DEPRECATED return unit vector in XY Plane
-        """
-        length = self.length2d()
         return(Point3d(self.X / length, self.Y / length, self.Z / length))
 
     def product(self, other):
@@ -174,7 +162,6 @@ class Point3d(object):
         cy = self.Z * other.X - self.X * other.Z
         cz = self.X * other.Y - self.Y * other.X
         return(Point3d(xy, cy, cz))
-
 
     def rotated_Z(self, theta):
         """
@@ -218,35 +205,6 @@ class Point3d(object):
         zr = self.Y * math.sin(theta) + self.Z * math.cos(theta)
         return(Point3d(xr, yr, zr))
 
-    def _old_rotate2d(self, radians):
-        """ DEPRECATED """
-        cos = math.cos(radians)
-        sin = math.sin(radians)
-        x = self.x * cos - self.y * sin
-        y = self.x * sin + self.y * cos
-        self.x = x
-        self.y = y
-
-    def _old_rotated2d(self, radians):
-        """
-        rotate self number of radians clockwise, and return new object
-        """
-        cos = math.cos(radians)
-        sin = math.sin(radians)
-        new_x = self.X * cos - self.Y * sin
-        new_y = self.X * sin + self.Y * cos
-        new_z = self.Z
-        return(Point3d(new_x, new_y, new_z))
-
-    def _old_normalized(self):
-        """
-        normalize -> the greteast value = 1 all other are scaled
-        """
-        max_value = max(abs(self.X), abs(self.Y), abs(self.Z))
-        if max_value == 0:
-            return(Point3d(0.0, 0.0, 0.0))
-        return(Point3d(self.X / max_value, self.Y / max_value, self.Z / max_value))
-
     def dot(self, other):
         """
         Dot Product of two vectors with the same number of items
@@ -270,10 +228,14 @@ class Point3d(object):
         """
         return(math.acos(self.dot(other)))
 
+
 class Controller(object):
     """
     Class to receive Gcode Commands and Statements
     and also control a number of motors to do the motion
+
+    Motors up to three
+    Spindle -> could be also a laser or something else
     """
 
     def __init__(self, resolution=1.0, default_speed=1.0):
@@ -446,19 +408,6 @@ class Controller(object):
         logging.debug("%s called with %s", inspect.stack()[0][3], args)
         logging.info("M9 turn all coolant off")
 
-    def __to_angle(self, offset):
-        """
-        takes position i and j and returns angle
-        """
-        logging.info("%s called with %s", inspect.stack()[0][3], offset)
-        if (offset.X == 0) and (offset.Y == 0):
-            return(math.pi * 2)
-        else:
-            angle = math.acos(offset.X)
-            if offset.Y <= 0:
-                angle += math.pi
-            return(angle)
-
     def __get_center(self, target, radius):
         logging.info("%s called with %s", inspect.stack()[0][3], (target, radius))
         d = target - self.position
@@ -470,14 +419,6 @@ class Controller(object):
         i = (x - (y * h_x2_div_d))/2
         j = (y + (x * h_x2_div_d))/2
         return(Point3d(i, j, 0.0))
-
-    def float_iter(self, start, stop, stepsize):
-        steps = abs(stop - start) / stepsize
-        if stop < start and stepsize > 0:
-            stepsize = -stepsize
-        for _ in range(steps):
-            yield start
-            start += stepsize
 
     def __arc(self, *args):
         """
@@ -689,6 +630,7 @@ class Parser(object):
     """
 
     def __init__(self):
+        # build our controller
         self.controller = Controller()
         self.controller.add_motor("X", Motor())
         self.controller.add_motor("Y", Motor())
@@ -697,6 +639,7 @@ class Parser(object):
         self.last_g_code = None
 
     def parse_g_params(self, line):
+        """parse known Parameters to G-Commands"""
         result = {}
         parameters = ("X", "Y", "Z", "F", "I", "J", "K", "P", "R")
         for parameter in parameters:
@@ -706,6 +649,7 @@ class Parser(object):
         return(result)
 
     def parse_m_params(self, line):
+        """parse known Parameters to M-Commands"""
         result = {}
         parameters = ("S")
         for parameter in parameters:
@@ -715,6 +659,13 @@ class Parser(object):
         return(result)
 
     def caller(self, methodname=None, args=None):
+        """
+        calls G- or M- code Method
+
+        if no G-Code Method was given, the last methos will be repeated
+
+        fo example G02 results in call of self.controller.G02(args)
+        """
         logging.info("Methodname = %s" % methodname)
         if methodname is None:
             methodname = self.last_g_code
@@ -724,7 +675,11 @@ class Parser(object):
         method_to_call(args)
 
     def read(self):
-        for line in open("output_0001.ngc", "rb"):
+        """
+        read input file line by line, and parse gcode Commands
+        """
+        for line in open("output_0003.ngc", "rb"):
+            # cleanup line
             line = line.strip()
             line = line.upper()
             # filter out some incorrect lines
@@ -762,11 +717,13 @@ class Parser(object):
                 logging.debug("No G-Code on this line assuming last modal G-Code %s" % self.last_g_code)
                 result = self.parse_xyzijf(line)
                 self.caller(methodname=None, args=result)
+            # pygame drawing and pause after each step
             pygame.display.flip()
             if AUTOMATIC is not None:
                 time.sleep(AUTOMATIC)
             else:
                 while (pygame.event.wait().type != pygame.KEYDOWN): pass
+        # wait for keypress
         while (pygame.event.wait().type != pygame.KEYDOWN): pass
 
 
