@@ -314,13 +314,14 @@ class Controller(object):
         """
         method to initialize single steps on the different axis
         """
+        logging.info("%s called with %s", inspect.stack()[0][3], args)
         data = args[0]
         for axis in ("X", "Y", "Z"):
             step = data[axis]
             direction = self.get_direction(step)
             motor_steps = abs(step) * self.resolution
             logging.debug(" %s scaling from %s mm to %s step in direction %s ", axis, abs(step), motor_steps, direction)
-            self.motors[axis].move_float(direction, abs(step) * self.resolution)
+            self.motors[axis].move_float(direction, motor_steps)
         logging.info("Motor: X=%s, Y=%s, Z=%s; Spindle: %s", \
             self.motors["X"].get_position(), \
             self.motors["Y"].get_position(), \

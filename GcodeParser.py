@@ -7,6 +7,7 @@
 try:
     import RPi.GPIO as GPIO
 except ImportError:
+    logging.error("Semms not be a RaspberryPi")
     from  FakeGPIO import FakeGPIO as GPIO
 import sys
 import re
@@ -39,11 +40,11 @@ class Parser(object):
         self.surface = surface
         # build our controller
         self.controller = Controller(surface=surface, resolution=256/36, default_speed=1.0)
-        self.controller.add_motor("X", BipolarStepperMotor(coils=(4,17,27,22), enable_pin=18, delay=10, max_position=256, min_position=0))
-        self.controller.add_motor("Y", BipolarStepperMotor(coils=(24,25,7,8), delay=10, enable_pin=18, max_position=256, min_position=0))
+        self.controller.add_motor("X", BipolarStepperMotor(coils=(4, 17, 27, 22), delay=33, max_position=256, min_position=0))
+        self.controller.add_motor("Y", BipolarStepperMotor(coils=(24, 25, 7, 8), delay=33, max_position=256, min_position=0))
         #self.controller.add_motor("X", Motor())
         #self.controller.add_motor("Y", Motor())
-        self.controller.add_motor("Z", Motor())
+        self.controller.add_motor("Z", Motor(delay=33, min_position=-10000, max_position=10000))
         self.controller.add_spindle(Laser(power_pin=14))
         #self.controller.add_spindle(Spindle())
         self.last_g_code = None
@@ -168,10 +169,19 @@ if __name__ == "__main__":
     # bring GPIO to a clean state
     GPIO.cleanup()
     GPIO.setmode(GPIO.BCM)
+    GPIO.setup(23, GPIO.OUT)
+    GPIO.output(23, 1)
+    GPIO.setup(14, GPIO.OUT)
+    GPIO.output(14, 0)
     pygame.init()
     #surface = pygame.display.set_mode((400, 400))
     #surface.fill((0, 0, 0))
     #pygame.display.flip()
-    parser = Parser(surface=None)
-    parser.read()
+    try:
+        key = raw_input("Press KEy to start parsing:")
+        parser = Parser(surface=None)
+        parser.read()
+    except KeyboardInterrupt:
+        GPIO.cleanup()
     pygame.quit()
+

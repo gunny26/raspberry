@@ -124,11 +124,11 @@ class BipolarStepperMotor(object):
         # original one from adafruit
         self.sequence = [(1,0,1,0), (0,1,1,0), (0,1,0,1), (1,0,0,1)]
         # trial, but does not work properly
-        self.sequence = [(1,0,1,0), (0,0,1,0), (0,1,1,0), (0,1,0,0), (0,1,0,1), (0,0,0,1), (1,0,0,1), (1,0,0,0)]
+        #self.sequence = [(1,0,1,0), (0,0,1,0), (0,1,1,0), (0,1,0,0), (0,1,0,1), (0,0,0,1), (1,0,0,1), (1,0,0,0)]
         # ok
-        self.sequence = [(1,0,0,0), (0,0,1,0), (0,1,0,0), (0,0,0,1)]
+        #self.sequence = [(1,0,0,0), (0,0,1,0), (0,1,0,0), (0,0,0,1)]
         # also ok
-        self.sequence = [(1,0,0,0), (1,0,1,0), (0,0,1,0), (0,1,1,0), (0,1,0,0), (0,1,0,1), (0,0,0,1), (1,0,0,1)]
+        #self.sequence = [(1,0,0,0), (1,0,1,0), (0,0,1,0), (0,1,1,0), (0,1,0,0), (0,1,0,1), (0,0,0,1), (1,0,0,1)]
         self.num_sequence = len(self.sequence)
         self.coils = coils
         for pin in self.coils:
@@ -371,6 +371,7 @@ class Laser(object):
     def __init__(self, pin):
         self.pin = pin
         GPIO.setup(self.pin, GPIO.OUT)
+        self.on()
 
     def on(self):
         GPIO.output(self.pin, 1)
@@ -382,12 +383,14 @@ class Laser(object):
 def main():
     # bring GPIO to a clean state
     GPIO.cleanup()
+    GPIO.cleanup()
     GPIO.setmode(GPIO.BCM)
 
     # enable lm293d with pin 18 HIGH
-    enable_pin = 18
+    enable_pin = 23
     GPIO.setup(enable_pin, GPIO.OUT)
     GPIO.output(enable_pin, 1)
+    print GPIO.gpio_function(enable_pin)
 
     # delay in ms (milliseconds) for phase change
     delay = 100.0
@@ -476,10 +479,10 @@ def main():
         elif key == "L":
             laser.on()
         elif key == "V":
-            laser.on()
+            # laser.on()
             for point in points:
                 controller.goto(point[0], point[1])
-            laser.off()
+            # laser.off()
             controller.goto(0, 0)
         controller.unhold()
         time.sleep(delay / 1000.0)
