@@ -306,76 +306,57 @@ class Controller(object):
         newposition = center + inv_offset.rotated_Z(angle)
         self.__goto(newposition)
         logging.info("stoping at angle %s, should be %s", start_angle + angle, stop_angle)
-        if self.position != target:
-            logging.error("Actual Position %s should be %s, correcting", self.position, target)
-            self.__goto(target)
+        # Correction, after all we are maybe not at target
+        #if self.position != target:
+        #    logging.error("Actual Position %s should be %s, correcting", self.position, target)
+        #    self.__goto(target)
 
     def __step(self, *args):
         """
         method to initialize single steps on the different axis
+        the size here is already steps, not units as mm or inches
+        scaling is done in __goto
         """
         logging.info("%s called with %s", inspect.stack()[0][3], args)
         data = args[0]
         for axis in ("X", "Y", "Z"):
-            step = data[axis]
+            step = data.__dict__[axis]
+            assert -1.0 <= step <= 1.0
+            if step == 0.0 : 
+                continue
             direction = self.get_direction(step)
-            motor_steps = abs(step) * self.resolution
-            logging.debug(" %s scaling from %s mm to %s step in direction %s ", axis, abs(step), motor_steps, direction)
-            self.motors[axis].move_float(direction, motor_steps)
-        logging.info("Motor: X=%s, Y=%s, Z=%s; Spindle: %s", \
-            self.motors["X"].get_position(), \
-            self.motors["Y"].get_position(), \
-            self.motors["Z"].get_position(), \
-            self.spindle.get_state())
+            self.motors[axis].move_float(direction, abs(step))
 
-    def __goto(self, newposition):
+    def __goto(self, target):
         """
         method to move to position given
         position is absolute
         """
-        logging.debug("moving from %s to %s", self.position, newposition)
-        length_x = self.position.X - newposition.X
-        length_y = self.position.Y - newposition.Y
-        length_z = self.position.Z - newposition.Z
-        max_length = max(abs(length_x), abs(length_y), abs(length_z))
-        logging.debug("max_length: %s", max_length)
-        if max_length == 0:
+        logging.info("%s called with %s", inspect.stack()[0][3], target)
+        logging.error("moving from %s mm to %s mm", self.position, target)
+        logging.error("moving from %s steps to %s steps", self.position * self.resolution, target * self.resolution)
+        move_vec = target - self.position
+        if move_vec.length() == 0.0:
             logging.info("No Movement detected")
             # no movement at all
             return
+        move_vec_unit = move_vec.unit()
         # steps on each axes to move
-        step_x = self.resolution * length_x / max_length
-        step_y = self.resolution * length_y / max_length
-        step_z = self.resolution * length_z / max_length
-        data =  { "X":step_x, "Y":step_y, "Z":step_z}
-        logging.debug(data)
-        for _ in range(int(self.resolution * max_length)):
-            self.__step({ "X":step_x, "Y":step_y, "Z":step_z})
+        # scale from mm to steps
+        move_vec_steps = move_vec * self.resolution
+        move_vec_steps_unit = move_vec_steps.unit()
+        logging.error("scaled %s mm to %s steps", move_vec, move_vec_steps)
+        for _ in range(int(move_vec_steps.length())):
+            self.__step(move_vec_steps_unit)
         if self.surface is not None:
-            self.pygame_update(newposition)
-        self.position = newposition
-
-    def draw_grid(self):
-        """
-        draw grid on pygame window
-        first determine, which axis are to draw
-        second determine what the min_position and max_positions of each motor are
-
-        surface.X : self.motors["X"].min_position <-> surface.get_width() = self.motors["X"].max_position
-        surface.Y : self.motors["Y"].min_position <-> surface.get_height() = self.motors["Y"].max_position
-        """
-        color = pygame.Color(0, 50, 0, 255)
-        for x in range(0, self.surface.get_height(), 10):
-            pygame.draw.line(self.surface, color, (x, 0), (x, self.surface.get_height()), 1)
-        for y in range(0, self.surface.get_width(), 10):
-            pygame.draw.line(self.surface, color, (0, y), (self.surface.get_width(), y), 1)
-        color = pygame.Color(0, 100, 0, 255)
-        pygame.draw.line(self.surface, color, (self.surface.get_width() / 2, 0), (self.surface.get_width() / 2, self.surface.get_height()))
-        pygame.draw.line(self.surface, color, (0, self.surface.get_height() / 2), (self.surface.get_width(), self.surface.get_height() / 2))
-        # draw motor scales
-        color = pygame.Color(100, 0, 0, 255)
-        pygame.draw.line(self.surface, color, (self.surface.get_width() - 10, 0), (self.surface.get_width() - 10, self.surface.get_height()))
-        pygame.draw.line(self.surface, color, (0, self.surface.get_height() - 10), (self.surface.get_width(), self.surface.get_height() - 10))
+            self.pygame_update(target)
+        self.position = target
+        # after move check controller position with motor positions
+        motor_position = Point3d(self.motors["X"].get_position(), self.motors["Y"].get_position(), self.motors["Z"].get_position())
+        logging.info("Steps-Drift : Motor: %s; Drift %s; Spindle: %s", \
+            motor_position, self.position * self.resolution - motor_position, self.spindle.get_state())
+        logging.info("Unit-Drift: Motor: %s; Drift %s; Spindle: %s", \
+            motor_position / self.resolution, self.position - motor_position / self.resolution, self.spindle.get_state())
 
     def pygame_update(self, newposition):
         centerx = self.surface.get_width() / 2
@@ -408,14 +389,14 @@ class Controller(object):
         parameter x or y has to be sometime float
         """
         data = args[0]
-        newposition = Point3d(0, 0, 0)
+        target = Point3d(0, 0, 0)
         for axis in ("X", "Y", "Z"):
             if axis in data:
-                newposition.__dict__[axis] = self.position.__dict__[axis] + data[axis]
+                target.__dict__[axis] = self.position.__dict__[axis] + data[axis]
             else:
-                newposition.__dict__[axis] = self.position.__dict__[axis]
-        logging.info("New Position = %s", newposition)
-        self.__goto(newposition)
+                target.__dict__[axis] = self.position.__dict__[axis]
+        logging.info("target = %s", target)
+        self.__goto(target)
 
     def move_abs(self, *args):
         """
@@ -427,14 +408,14 @@ class Controller(object):
         logging.info("%s called with %s", inspect.stack()[0][3], args)
         data = args[0]
         if data is None: return
-        newposition = Point3d(0, 0, 0)
+        target = Point3d(0.0, 0.0, 0.0)
         for axis in ("X", "Y", "Z"):
             if axis in data:
-                newposition.__dict__[axis] = data[axis]
+                target.__dict__[axis] = data[axis]
             else:
-                newposition.__dict__[axis] = self.position.__dict__[axis]
-        logging.info("New Position = %s", newposition)
-        self.__goto(newposition)
+                target.__dict__[axis] = self.position.__dict__[axis]
+        logging.info("target = %s", target)
+        self.__goto(target)
 
     def __getattr__(self, name):
         def method(*args):

@@ -28,9 +28,16 @@ class Motor(object):
         this method is called from controller
         float_step is bewtween 0.0 < 1.0
         """
-        new_float_position = self.float_position + float_step
-        if (new_float_position - self.float_position) >= 1.0:
+        logging.info("move_float called with %d, %f", direction, float_step)
+        assert type(direction) == int
+        assert (direction == -1) or (direction == 1)
+        assert 0.0 <= float_step <= 1.0
+        self.float_position += float_step * direction
+        logging.debug("move_float position = %d : float_position = %f", self.position, self.float_position)
+        logging.debug("Float to Int Value: %f", abs(self.position - self.float_position))
+        while abs(self.position - self.float_position) >= float(1):
             self.__move(direction)
+        assert abs(self.position - self.float_position) < float(1)
 
     def __move(self, direction):
         """
@@ -87,11 +94,16 @@ class BipolarStepperMotor(Motor):
         this method is called from controller
         float_step is bewtween 0.0 < 1.0
         """
-        logging.error("move_float called with %s and %s", direction, float_step)
-        new_float_position = self.float_position + float_step
-        logging.error("%s : %s", self.float_position, new_float_position)
-        if (new_float_position - self.float_position) >= 1.0:
+        logging.info("move_float called with %d, %f", direction, float_step)
+        assert type(direction) == int
+        assert (direction == -1) or (direction == 1)
+        assert 0.0 <= float_step <= 1.0
+        self.float_position += float_step * direction
+        logging.debug("move_float position = %d : float_position = %f", self.position, self.float_position)
+        logging.debug("Float to Int Value: %f", abs(self.position - self.float_position))
+        while abs(self.position - self.float_position) >= float(1):
             self.__move(direction)
+        assert abs(self.position - self.float_position) < float(1)
 
     def __move(self, direction):
         """
@@ -99,16 +111,16 @@ class BipolarStepperMotor(Motor):
         delay_faktor could be set, if this Motor is connected to a controller
         which moves also another Motor
         """
-        logging.error("__move called")
+        logging.info("__move called")
         phase = self.SEQUENCE[self.position % self.num_sequence]
-        logging.error(phase)
+        logging.debug(phase)
         counter = 0
         for pin in self.coils:
             GPIO.output(pin, phase[counter])
             counter += 1
         self.position += direction
-        assert self.position <= self.max_position
-        assert self.position >= self.min_position
+        logging.debug("_move position = %s : float_position = %s", self.position, self.float_position)
+        assert self.min_position <= self.position <= self.max_position
         # give motor a chance to move
         time.sleep(self.delay)
 

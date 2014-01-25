@@ -4,6 +4,8 @@
 # parse Gcode
 #
 
+import logging
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 try:
     import RPi.GPIO as GPIO
 except ImportError:
@@ -11,8 +13,6 @@ except ImportError:
     from  FakeGPIO import FakeGPIO as GPIO
 import sys
 import re
-import logging
-logging.basicConfig(level=logging.INFO, format="%(message)s")
 import inspect
 import math
 import pygame
@@ -26,7 +26,7 @@ from Spindle import Laser as Laser
 from Controller import Controller as Controller
 
 # wait for keypress, or wait amount of time
-# AUTOMATIC = None
+AUTOMATIC = None
 AUTOMATIC = 0.01
 # pygame Zoom faktor
 ZOOM = 4
@@ -174,12 +174,12 @@ if __name__ == "__main__":
     GPIO.setup(14, GPIO.OUT)
     GPIO.output(14, 0)
     pygame.init()
-    #surface = pygame.display.set_mode((400, 400))
-    #surface.fill((0, 0, 0))
-    #pygame.display.flip()
+    surface = pygame.display.set_mode((400, 400))
+    surface.fill((0, 0, 0))
+    pygame.display.flip()
     try:
-        key = raw_input("Press KEy to start parsing:")
-        parser = Parser(surface=None)
+        # key = raw_input("Press KEy to start parsing:")
+        parser = Parser(surface=surface)
         parser.read()
     except KeyboardInterrupt:
         GPIO.cleanup()
