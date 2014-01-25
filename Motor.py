@@ -4,7 +4,10 @@
 # parse Gcode
 #
 
-import RPi.GPIO as GPIO
+try:
+    import RPi.GPIO as GPIO
+except ImportError:
+    from FakeGPIO import FakeGPIO as GPIO
 import logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 import time
@@ -41,6 +44,12 @@ class Motor(object):
 
     def unhold(self):
         logging.info("Unholding Motor Coils")
+
+    def get_position(self):
+        return(self.position)
+
+    def get_position_float(self):
+        return(self.position_float)
 
 
 class BipolarStepperMotor(Motor):

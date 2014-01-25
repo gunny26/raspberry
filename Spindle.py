@@ -4,15 +4,12 @@
 # parse Gcode
 #
 
-import RPi.GPIO as GPIO
-import sys
-import re
+try:
+    import RPi.GPIO as GPIO
+except ImportError:
+    from FakeGPIO import FakeGPIO as GPIO
 import logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
-import inspect
-import math
-import pygame
-import time
 
 
 class Spindle(object):
@@ -26,6 +23,7 @@ class Spindle(object):
 
     def __init__(self, speed=1.0):
         self.speed = speed
+        self.running = False
 
     def rotate(self, direction, speed=None):
         """
@@ -33,13 +31,21 @@ class Spindle(object):
         """
         if speed is None:
             speed = self.speed
+        self.running = True
         logging.info("Turn Spindle in Direction %s with speed %s", direction, speed)
         
+    def get_state(self):
+        if self.running:
+            return("%s@%s" % (self.running, self.speed))
+        else:
+            return("not running")
+
     def unhold(self):
         """
         power off Spindle
         """
         logging.info("Power Off Spindle")
+        self.running = False
 
 
 class Laser(Spindle):
@@ -51,6 +57,7 @@ class Laser(Spindle):
     def __init__(self, power_pin, speed=1.0):
         self.power_pin = power_pin
         GPIO.setup(self.power_pin, GPIO.OUT)
+        Spindle.__init__(self, speed=1.0)
 
     def rotate(self, direction, speed=None):
         """
@@ -58,6 +65,7 @@ class Laser(Spindle):
         """
         logging.info("Turn Laser on")
         GPIO.output(self.power_pin, 1)
+        self.running = True
         
     def unhold(self):
         """
@@ -65,3 +73,4 @@ class Laser(Spindle):
         """
         logging.info("Turn Laser off")
         GPIO.output(self.power_pin, 0)
+        self.running = False

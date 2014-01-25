@@ -4,7 +4,10 @@
 # parse Gcode
 #
 
-import RPi.GPIO as GPIO
+try:
+    import RPi.GPIO as GPIO
+except ImportError:
+    from  FakeGPIO import FakeGPIO as GPIO
 import sys
 import re
 import logging
@@ -32,17 +35,43 @@ class Parser(object):
     Class to parse GCode Text Commands
     """
 
-    def __init__(self):
+    def __init__(self, surface):
+        self.surface = surface
         # build our controller
-        self.controller = Controller(surface=surface)
+        self.controller = Controller(surface=surface, resolution=256/36, default_speed=1.0)
         self.controller.add_motor("X", BipolarStepperMotor(coils=(4,17,27,22), enable_pin=18, delay=10, max_position=256, min_position=0))
         self.controller.add_motor("Y", BipolarStepperMotor(coils=(24,25,7,8), delay=10, enable_pin=18, max_position=256, min_position=0))
         #self.controller.add_motor("X", Motor())
         #self.controller.add_motor("Y", Motor())
         self.controller.add_motor("Z", Motor())
         self.controller.add_spindle(Laser(power_pin=14))
-        # self.controller.add_spindle(Spindle())
+        #self.controller.add_spindle(Spindle())
         self.last_g_code = None
+        # draw grid
+        if self.surface is not None:
+            self.draw_grid()
+
+    def draw_grid(self):
+        """
+        draw grid on pygame window
+        first determine, which axis are to draw
+        second determine what the min_position and max_positions of each motor are
+
+        surface.X : self.motors["X"].min_position <-> surface.get_width() = self.motors["X"].max_position
+        surface.Y : self.motors["Y"].min_position <-> surface.get_height() = self.motors["Y"].max_position
+        """
+        color = pygame.Color(0, 50, 0, 255)
+        for x in range(0, self.surface.get_height(), 10):
+            pygame.draw.line(self.surface, color, (x, 0), (x, self.surface.get_height()), 1)
+        for y in range(0, self.surface.get_width(), 10):
+            pygame.draw.line(self.surface, color, (0, y), (self.surface.get_width(), y), 1)
+        color = pygame.Color(0, 100, 0, 255)
+        pygame.draw.line(self.surface, color, (self.surface.get_width() / 2, 0), (self.surface.get_width() / 2, self.surface.get_height()))
+        pygame.draw.line(self.surface, color, (0, self.surface.get_height() / 2), (self.surface.get_width(), self.surface.get_height() / 2))
+        # draw motor scales
+        color = pygame.Color(100, 0, 0, 255)
+        pygame.draw.line(self.surface, color, (self.surface.get_width() - 10, 0), (self.surface.get_width() - 10, self.surface.get_height()))
+        pygame.draw.line(self.surface, color, (0, self.surface.get_height() - 10), (self.surface.get_width(), self.surface.get_height() - 10))
 
     def parse_g_params(self, line):
         """parse known Parameters to G-Commands"""
@@ -84,7 +113,7 @@ class Parser(object):
         """
         read input file line by line, and parse gcode Commands
         """
-        for line in open("simple_circle.gcode", "rb"):
+        for line in open("output_0003.ngc", "rb"):
             # cleanup line
             line = line.strip()
             line = line.upper()
@@ -124,7 +153,9 @@ class Parser(object):
                 result = self.parse_xyzijf(line)
                 self.caller(methodname=None, args=result)
             # pygame drawing and pause after each step
-            pygame.display.flip()
+            if self.surface is not None:
+                pygame.display.flip()
+            # automatic stepping or keypress
             if AUTOMATIC is not None:
                 time.sleep(AUTOMATIC)
             else:
@@ -138,9 +169,9 @@ if __name__ == "__main__":
     GPIO.cleanup()
     GPIO.setmode(GPIO.BCM)
     pygame.init()
-    surface = pygame.display.set_mode((400, 400))
-    surface.fill((0, 0, 0))
-    pygame.display.flip()
-    parser = Parser()
+    #surface = pygame.display.set_mode((400, 400))
+    #surface.fill((0, 0, 0))
+    #pygame.display.flip()
+    parser = Parser(surface=None)
     parser.read()
     pygame.quit()

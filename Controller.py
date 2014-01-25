@@ -34,7 +34,9 @@ class Controller(object):
         """
         initialize Controller Object
         @param
-        resolution -> step to millimeter or default
+        resolution -> 1.0 means 1 step 1 mm
+        for our purpose - laser engraver - 256 steps are 36mm so resultion is 36 / 256 = 0,1406
+        gcode mm to steps = 1 mm = 256/36 = 
         """
         self.default_speed = default_speed
         self.resolution = resolution
@@ -45,15 +47,17 @@ class Controller(object):
         self.move = self.move_abs
         # defaults to millimeter
         self.unit = "millimeter"
-        # how many steps represent 1 mm
-        self.step_factor = int(256 / 32)
         # motors dict
         self.motors = {}
+        self.spindle = None
+        self.speed = 0.0
         # pygame specificas to draw correct
         self.pygame_zoom = ZOOM
         self.pygame_draw = True
         self.pygame_color = pygame.Color(255,255,255,255) 
-        self.draw_grid()
+
+    def get_position(self):
+        return(self.position)
 
     def get_direction(self, number):
         """get direction of number"""
@@ -160,6 +164,10 @@ class Controller(object):
     def M2(self, *args):
         logging.debug("%s called with %s", inspect.stack()[0][3], args)
         logging.info("M2 end the program")
+        for axis, motor in self.motors.items():
+            motor.unhold()
+        self.spindle.unhold()
+        raise StandardError("M02 received, end of prgram")
 
     def M3(self, *args):
         logging.debug("%s called with %s", inspect.stack()[0][3], args)
@@ -310,9 +318,14 @@ class Controller(object):
         for axis in ("X", "Y", "Z"):
             step = data[axis]
             direction = self.get_direction(step)
-            motor_steps = abs(step) * self.step_factor
+            motor_steps = abs(step) * self.resolution
             logging.debug(" %s scaling from %s mm to %s step in direction %s ", axis, abs(step), motor_steps, direction)
-            self.motors[axis].move_float(direction, abs(step) * self.step_factor)
+            self.motors[axis].move_float(direction, abs(step) * self.resolution)
+        logging.info("Motor: X=%s, Y=%s, Z=%s; Spindle: %s", \
+            self.motors["X"].get_position(), \
+            self.motors["Y"].get_position(), \
+            self.motors["Z"].get_position(), \
+            self.spindle.get_state())
 
     def __goto(self, newposition):
         """
@@ -330,17 +343,26 @@ class Controller(object):
             # no movement at all
             return
         # steps on each axes to move
-        step_x = self.step_factor * length_x / max_length
-        step_y = self.step_factor * length_y / max_length
-        step_z = self.step_factor * length_z / max_length
+        step_x = self.resolution * length_x / max_length
+        step_y = self.resolution * length_y / max_length
+        step_z = self.resolution * length_z / max_length
         data =  { "X":step_x, "Y":step_y, "Z":step_z}
         logging.debug(data)
-        for _ in range(int(self.step_factor * max_length)):
+        for _ in range(int(self.resolution * max_length)):
             self.__step({ "X":step_x, "Y":step_y, "Z":step_z})
-        self.pygame_update(newposition)
+        if self.surface is not None:
+            self.pygame_update(newposition)
         self.position = newposition
 
     def draw_grid(self):
+        """
+        draw grid on pygame window
+        first determine, which axis are to draw
+        second determine what the min_position and max_positions of each motor are
+
+        surface.X : self.motors["X"].min_position <-> surface.get_width() = self.motors["X"].max_position
+        surface.Y : self.motors["Y"].min_position <-> surface.get_height() = self.motors["Y"].max_position
+        """
         color = pygame.Color(0, 50, 0, 255)
         for x in range(0, self.surface.get_height(), 10):
             pygame.draw.line(self.surface, color, (x, 0), (x, self.surface.get_height()), 1)
@@ -349,6 +371,10 @@ class Controller(object):
         color = pygame.Color(0, 100, 0, 255)
         pygame.draw.line(self.surface, color, (self.surface.get_width() / 2, 0), (self.surface.get_width() / 2, self.surface.get_height()))
         pygame.draw.line(self.surface, color, (0, self.surface.get_height() / 2), (self.surface.get_width(), self.surface.get_height() / 2))
+        # draw motor scales
+        color = pygame.Color(100, 0, 0, 255)
+        pygame.draw.line(self.surface, color, (self.surface.get_width() - 10, 0), (self.surface.get_width() - 10, self.surface.get_height()))
+        pygame.draw.line(self.surface, color, (0, self.surface.get_height() - 10), (self.surface.get_width(), self.surface.get_height() - 10))
 
     def pygame_update(self, newposition):
         centerx = self.surface.get_width() / 2
