@@ -28,7 +28,7 @@ class Motor(object):
         this method is called from controller
         float_step is bewtween 0.0 < 1.0
         """
-        logging.info("move_float called with %d, %f", direction, float_step)
+        logging.debug("move_float called with %d, %f", direction, float_step)
         assert type(direction) == int
         assert (direction == -1) or (direction == 1)
         assert 0.0 <= float_step <= 1.0
@@ -94,7 +94,7 @@ class BipolarStepperMotor(Motor):
         this method is called from controller
         float_step is bewtween 0.0 < 1.0
         """
-        logging.info("move_float called with %d, %f", direction, float_step)
+        logging.debug("move_float called with %d, %f", direction, float_step)
         assert type(direction) == int
         assert (direction == -1) or (direction == 1)
         assert 0.0 <= float_step <= 1.0
@@ -111,7 +111,7 @@ class BipolarStepperMotor(Motor):
         delay_faktor could be set, if this Motor is connected to a controller
         which moves also another Motor
         """
-        logging.info("__move called")
+        logging.debug("__move called")
         phase = self.SEQUENCE[self.position % self.num_sequence]
         logging.debug(phase)
         counter = 0
