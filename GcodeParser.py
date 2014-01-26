@@ -115,7 +115,7 @@ class Parser(object):
         """
         read input file line by line, and parse gcode Commands
         """
-        for line in open("output_0004.ngc", "rb"):
+        for line in open("output_0001.ngc", "rb"):
             # cleanup line
             line = line.strip()
             line = line.upper()
