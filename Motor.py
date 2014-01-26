@@ -56,6 +56,57 @@ class Motor(object):
         return(self.position_float)
 
 
+class LaserMotor(Motor):
+    """Laser Motor, reactive if axis moves negative"""
+
+    def __init__(self, laser_pin, max_position, min_position):
+        self.laser_pin = laser_pin
+        self.float_position = 0.0
+        self.max_position = max_position
+        self.min_position = min_position
+        # define
+        self.position = 0.0
+        GPIO.setup(self.laser_pin, GPIO.OUT)
+        GPIO.setup(self.laser_pin, 0)
+ 
+    def move_float(self, direction, float_step):
+        """
+        this method is called from controller
+        float_step is bewtween 0.0 < 1.0
+        """
+        logging.debug("move_float called with %d, %f", direction, float_step)
+        assert type(direction) == int
+        assert (direction == -1) or (direction == 1)
+        assert 0.0 <= float_step <= 1.0
+        self.float_position += float_step * direction
+        distance = abs(self.float_position - self.position)
+        if distance >= 1.0:
+            self.__move(direction)
+        distance = abs(self.float_position - self.position)
+        logging.debug("int_position = %d : float_position = %f : distance = %f", self.position, self.float_position, distance)
+        assert distance < 1.0
+
+    def __move(self, direction):
+        """
+        move number of full integer steps
+        """
+        self.position += direction
+        # turn on laser if position < 0
+        if self.position < 0.0:
+            GPIO.output(self.laser_pin, 1)
+        else:
+            GPIO.output(self.laser_pin, 0)
+
+    def unhold(self):
+        logging.info("Power off laser")
+
+    def get_position(self):
+        return(self.position)
+
+    def get_position_float(self):
+        return(self.position_float)
+
+
 class BipolarStepperMotor(Motor):
     """
     Class to represent a bipolar stepper motor
@@ -101,7 +152,7 @@ class BipolarStepperMotor(Motor):
     # mixed torque - half step mode
     SEQUENCE_MIXED = ((1,0,0,0), (1,0,1,0), (0,0,1,0), (0,1,1,0), (0,1,0,0), (0,1,0,1), (0,0,0,1), (1,0,0,1))
     # ok
-    SEQUENCE = SEQUENCE_LOW
+    SEQUENCE = SEQUENCE_MIXED
 
     def __init__(self, coils, max_position, min_position):
         """init"""
@@ -127,12 +178,16 @@ class BipolarStepperMotor(Motor):
         assert type(direction) == int
         assert (direction == -1) or (direction == 1)
         assert 0.0 <= float_step <= 1.0
-        self.float_position += float_step * direction
-        logging.debug("move_float position = %d : float_position = %f", self.position, self.float_position)
-        logging.debug("Float to Int Value: %f", abs(self.position - self.float_position))
-        while abs(self.position - self.float_position) >= float(1):
+        self.float_position += (float_step * direction)
+        distance = abs(self.position - self.float_position)
+        if distance >= 1.0:
+            logging.debug("initializing full step, distance %s > 1.0", distance) 
             self.__move(direction)
-        assert abs(self.position - self.float_position) < float(1)
+        else:
+            logging.debug("distance %s to small to initialize full step", distance)
+        distance = abs(self.float_position - self.position)
+        logging.debug("int_position = %d : float_position = %f : distance = %f", self.position, self.float_position, distance)
+        assert distance < 1.0
 
     def __move(self, direction):
         """
@@ -140,17 +195,12 @@ class BipolarStepperMotor(Motor):
         delay_faktor could be set, if this Motor is connected to a controller
         which moves also another Motor
         """
-        logging.debug("__move called")
         phase = self.SEQUENCE[self.position % self.num_sequence]
-        logging.debug(phase)
         counter = 0
         for pin in self.coils:
             GPIO.output(pin, phase[counter])
             counter += 1
         self.position += direction
-        logging.debug("_move position = %s : float_position = %s", self.position, self.float_position)
-        assert self.min_position <= self.position <= self.max_position
-        # give motor a chance to move
 
     def unhold(self):
         """

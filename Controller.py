@@ -87,7 +87,7 @@ class Controller(object):
         logging.info("%s called with %s", inspect.stack()[0][3], args)
         data = args[0]
         self.pygame_color = pygame.Color(0, 128, 0, 255)
-        self.set_speed(data)
+        # self.set_speed(data)
         self.move(data)
     G1 = G01
 
@@ -165,8 +165,12 @@ class Controller(object):
     def M2(self, *args):
         logging.debug("%s called with %s", inspect.stack()[0][3], args)
         logging.info("M2 end the program")
+        # back to origin
+        self.__goto(Point3d(0, 0, 0))
+        # unhold everything
         for axis, motor in self.motors.items():
             motor.unhold()
+        # stop spindle
         self.spindle.unhold()
         raise StandardError("M02 received, end of prgram")
 
@@ -295,19 +299,21 @@ class Controller(object):
             stop_angle += math.pi * 2
         angle_steps = abs(int((start_angle - stop_angle) / angle_step))
         logging.info("Arc from %s rad to %s rad wtih %s steps in %s radians", start_angle, stop_angle, angle_steps, angle_step)
-        angle = 0
         inv_offset = offset * -1
-        logging.error("Inverse Offset vector : %s", inv_offset) 
-        for _ in range(angle_steps):
+        logging.error("Inverse Offset vector : %s", inv_offset)
+        angle = angle_step
+        while (start_angle + angle) < stop_angle:
+        #for _ in range(angle_steps):
             newposition = center + inv_offset.rotated_Z(angle)
             self.__goto(newposition)
             angle += angle_step
         # there is almost always a minimal gap to target angle,
         # lets do this last rotation exactly
-        newposition = center + inv_offset.rotated_Z(angle)
-        self.__goto(newposition)
-        logging.info("stoping at angle %s, should be %s", start_angle + angle, stop_angle)
+        #newposition = center + inv_offset.rotated_Z(angle)
+        #self.__goto(newposition)
+        logging.info("stopping at angle %s, should be %s", start_angle + angle, stop_angle)
         # Correction, after all we are maybe not at target
+        logging.error("Arc-Drift: Actual=%s, Target=%s, Drift=%s", self.position, target, self.position-target)
         #if self.position != target:
         #    logging.error("Actual Position %s should be %s, correcting", self.position, target)
         #    self.__goto(target)
@@ -330,15 +336,16 @@ class Controller(object):
 
     def __goto(self, target):
         """
-        method to move to position given
-        position is absolute
+        calculate vector between actual position and target position
+        scale this vector to motor-steps-units und split the
+        vector in unit vectors with length 1, to control single motor steps
         """
         logging.debug("%s called with %s", inspect.stack()[0][3], target)
         logging.debug("moving from %s mm to %s mm", self.position, target)
         logging.debug("moving from %s steps to %s steps", self.position * self.resolution, target * self.resolution)
         move_vec = target - self.position
         if move_vec.length() == 0.0:
-            logging.info("No Movement detected")
+            logging.info("move_vec is zero, nothing to draw")
             # no movement at all
             return
         move_vec_unit = move_vec.unit()
@@ -346,28 +353,45 @@ class Controller(object):
         # scale from mm to steps
         move_vec_steps = move_vec * self.resolution
         move_vec_steps_unit = move_vec_steps.unit()
-        logging.info("scaled %s mm to %s steps", move_vec, move_vec_steps)
-        for _ in range(int(move_vec_steps.length())):
+        #logging.error("move_vec_steps_unit=%s", move_vec_steps_unit)
+        #logging.error("scaled %s mm to %s steps", move_vec, move_vec_steps)
+        length_unit = move_vec_steps_unit.length()
+        length = move_vec_steps.length()
+        #logging.error("move_vec_steps.length() = %s", move_vec_steps.length())        
+        # use while loop the get to the exact value
+        while move_vec_steps.length() > 1.0:
             self.__step(move_vec_steps_unit)
+            #logging.error("actual length left to draw in tiny steps: %f", move_vec_steps.length())
+            move_vec_steps = move_vec_steps - move_vec_steps_unit
+        # the last fraction left
+        self.__step(move_vec_steps)
         if self.surface is not None:
             self.pygame_update(target)
         self.position = target
         # after move check controller position with motor positions
         motor_position = Point3d(self.motors["X"].get_position(), self.motors["Y"].get_position(), self.motors["Z"].get_position())
-        logging.info("Steps-Drift : Motor: %s; Drift %s; Spindle: %s", \
-            motor_position, self.position * self.resolution - motor_position, self.spindle.get_state())
-        logging.info("Unit-Drift: Motor: %s; Drift %s; Spindle: %s", \
-            motor_position / self.resolution, self.position - motor_position / self.resolution, self.spindle.get_state())
+        drift = self.position * self.resolution - motor_position
+        logging.error("Target Drift: Actual=%s; Target=%s; Drift=%s", self.position, target, self.position - target)
+        logging.error("Steps-Drift : Motor=%s; Drift %s length=%s; Spindle: %s", \
+            motor_position, drift, drift.length(), self.spindle.get_state())
+        # drift should not be more than 1 step
+        # drift could be in any direction 0.999...
+        assert drift.length() < Point3d(1.0, 1.0, 1.0).length()
+        #logging.info("Unit-Drift: Motor: %s; Drift %s; Spindle: %s", \
+        #    motor_position / self.resolution, self.position - motor_position / self.resolution, self.spindle.get_state())
 
     def pygame_update(self, newposition):
-        centerx = self.surface.get_width() / 2
-        centery = self.surface.get_height() / 2
-        color = pygame.Color(255, 255, 255, 255)
-        start = (self.pygame_zoom * self.position.X + centerx, centery - self.pygame_zoom * self.position.Y)
-        stop = (self.pygame_zoom * newposition.X + centerx, centery - self.pygame_zoom * newposition.Y)
-        logging.debug("Line from %s to %s", start, stop)
+        pan_x = self.surface.get_width() / 2
+        pan_y = self.surface.get_height() / 2
+        start = (self.pygame_zoom * self.position.X, self.resolution * self.position.Y)
+        stop = (self.pygame_zoom * newposition.X, self.resolution * newposition.Y)
+        color = pygame.Color(0, 50, 0, 255)
+        if self.motors["Z"].position < 0:
+            color = pygame.Color(0, 0, 255, 255)
         if self.pygame_draw:
             pygame.draw.line(self.surface, self.pygame_color, start, stop, 1)
+        # set red dot at motor position
+        self.surface.set_at((self.motors["X"].position, self.motors["Y"].position), pygame.Color(255,0,0,255))
         pygame.display.flip()
 
     def set_speed(self, *args):

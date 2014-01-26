@@ -34,17 +34,17 @@ class Point3d(object):
         return(Point3d(self.X + other.X, self.Y + other.Y, self.Z + other.Z))
 
     def __iadd__(self, other):
-        self.X += other["X"]
-        self.Y += other["Y"]
-        self.Z += other["Z"]
+        self.X += other.X
+        self.Y += other.Y
+        self.Z += other.Z
 
     def __sub__(self, other):
         return(Point3d(self.X - other.X, self.Y - other.Y, self.Z - other.Z))
 
     def __isub__(self, other):
-        self.X -= other["X"]
-        self.Y -= other["Y"]
-        self.Z -= other["Z"]
+        self.X -= other.X
+        self.Y -= other.Y
+        self.Z -= other.Z
 
     def __mul__(self, scalar):
         return(Point3d(self.X * scalar, self.Y * scalar, self.Z * scalar))
@@ -62,17 +62,16 @@ class Point3d(object):
         self.Y /= scalar
         self.Z /= scalar
 
-    def perpendicular2d(self):
-        """
-        return perpendicular vetor in XY Plane
-        """
-        return(Point3d(-self.Y, self.X, self.Z))
-
     def length(self):
         return(math.sqrt(self.X**2 + self.Y**2 + self.Z**2))
 
-
     def unit(self):
+        """
+        return unit vector of self
+        divide every element of self by length of self
+
+        length of unit vector is always 1
+        """
         length = self.length()
         return(Point3d(self.X / length, self.Y / length, self.Z / length))
 

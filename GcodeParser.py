@@ -21,6 +21,7 @@ import time
 from Point3d import Point3d as Point3d
 from Motor import Motor as Motor
 from Motor import BipolarStepperMotor as BipolarStepperMotor
+from Motor import LaserMotor as LaserMotor
 from Spindle import Spindle as Spindle
 from Spindle import Laser as Laser
 from Controller import Controller as Controller
@@ -39,13 +40,13 @@ class Parser(object):
     def __init__(self, surface):
         self.surface = surface
         # build our controller
-        self.controller = Controller(surface=surface, resolution=256/36, default_speed=1.0, delay=15)
-        self.controller.add_motor("X", BipolarStepperMotor(coils=(4, 17, 27, 22), max_position=256, min_position=0))
-        self.controller.add_motor("Y", BipolarStepperMotor(coils=(24, 25, 7, 8), max_position=256, min_position=0))
+        self.controller = Controller(surface=surface, resolution=512/36, default_speed=1.0, delay=1)
+        self.controller.add_motor("X", BipolarStepperMotor(coils=(4, 2, 27, 22), max_position=512, min_position=0))
+        self.controller.add_motor("Y", BipolarStepperMotor(coils=(24, 25, 7, 8), max_position=512, min_position=0))
         #self.controller.add_motor("X", Motor())
         #self.controller.add_motor("Y", Motor())
-        self.controller.add_motor("Z", Motor(min_position=-10000, max_position=10000))
-        self.controller.add_spindle(Laser(power_pin=14))
+        self.controller.add_motor("Z", LaserMotor(laser_pin=14, min_position=-10000, max_position=10000))
+        self.controller.add_spindle(Spindle())
         #self.controller.add_spindle(Spindle())
         self.last_g_code = None
         # draw grid
@@ -114,7 +115,7 @@ class Parser(object):
         """
         read input file line by line, and parse gcode Commands
         """
-        for line in open("output_0003.ngc", "rb"):
+        for line in open("output_0004.ngc", "rb"):
             # cleanup line
             line = line.strip()
             line = line.upper()
@@ -169,19 +170,28 @@ if __name__ == "__main__":
     # bring GPIO to a clean state
     GPIO.cleanup()
     GPIO.setmode(GPIO.BCM)
-    GPIO.setup(23, GPIO.OUT)
-    GPIO.output(23, 1)
-    GPIO.setup(14, GPIO.OUT)
-    GPIO.output(14, 0)
-    pygame.init()
-    surface = pygame.display.set_mode((400, 400))
-    surface.fill((0, 0, 0))
-    pygame.display.flip()
     try:
-        # key = raw_input("Press KEy to start parsing:")
+        logging.info("Initializing all GPIO Pins, and set state LOW")
+        for pin in (4, 2, 27, 22, 23, 14, 24, 25, 7, 8):
+            GPIO.setup(pin, GPIO.OUT)
+            GPIO.output(pin, 0)
+        logging.info("Please move positions to zero")
+        key = raw_input("Press any KEY when done")
+        GPIO.setup(23, GPIO.OUT)
+        GPIO.output(23, 1)
+        GPIO.setup(14, GPIO.OUT)
+        GPIO.output(14, 0)
+        key = raw_input("Press and KEY to start parsing")
+        pygame.init()
+        surface = pygame.display.set_mode((400, 400))
+        surface.fill((0, 0, 0))
+        pygame.display.flip()
         parser = Parser(surface=surface)
         parser.read()
-    except KeyboardInterrupt:
+    except Exception, exc:
+        logging.exception(exc)
+        GPIO.output(23, 0)
+        GPIO.output(14, 0)
         GPIO.cleanup()
     pygame.quit()
 
