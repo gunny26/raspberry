@@ -40,7 +40,7 @@ class Motor(object):
         distance = abs(self.position - self.float_position)
         if distance >= 1.0:
             logging.debug("initializing full step, distance %s > 1.0", distance) 
-            self.__move(direction)
+            self._move(direction)
         else:
             logging.debug("distance %s to small to initialize full step", distance)
         distance = abs(self.float_position - self.position)
@@ -48,7 +48,7 @@ class Motor(object):
         # final distance between exact float and real int must be lesser than 1.0
         assert distance < 1.0
 
-    def __move(self, direction):
+    def _move(self, direction):
         """
         move number of full integer steps
         """
@@ -78,7 +78,7 @@ class LaserMotor(Motor):
         GPIO.setup(self.laser_pin, GPIO.OUT)
         GPIO.setup(self.laser_pin, 0)
  
-    def __move(self, direction):
+    def _move(self, direction):
         """move number of full integer steps"""
         self.position += direction
         # turn on laser if position < 0
@@ -149,7 +149,7 @@ class BipolarStepperMotor(Motor):
             GPIO.setup(pin, 0)
         self.num_sequence = len(self.SEQUENCE)
 
-    def __move(self, direction):
+    def _move(self, direction):
         """
         move to given direction number of steps, its relative
         delay_faktor could be set, if this Motor is connected to a controller
