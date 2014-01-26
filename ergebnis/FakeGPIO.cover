@@ -1,0 +1,35 @@
+>>>>>> import logging
+>>>>>> logging.basicConfig(level=logging.INFO)
+       
+>>>>>> class FakeGPIO(object):
+           """use this class on non RaspberryPi"""
+       
+>>>>>>     BCM = True
+>>>>>>     OUT = True
+>>>>>>     IN = False
+>>>>>>     HIGH = True
+>>>>>>     LOW = False
+       
+>>>>>>     @staticmethod
+           def setup(*args):
+   40:         pass
+       
+>>>>>>     @staticmethod
+           def output(*args):
+   30:         pass
+       
+>>>>>>     @staticmethod
+           def cleanup(*args):
+    2:         pass
+       
+>>>>>>     @staticmethod
+           def setmode(*args):
+    1:         pass
+       
+>>>>>>     def __getattr__(self, name):
+>>>>>>         def method(*args):
+>>>>>>             logging.info("tried to handle unknown method " + name)
+>>>>>>             if args:
+>>>>>>                 logging.info("it had arguments: " + str(args))
+>>>>>>         return method
+       

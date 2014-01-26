@@ -13,7 +13,7 @@ except ImportError:
     from  FakeGPIO import FakeGPIO as GPIO
 import sys
 import re
-import inspect
+# import inspect
 import pygame
 import time
 # own modules
@@ -50,6 +50,15 @@ class Parser(object):
         # draw grid
         if self.surface is not None:
             self.draw_grid()
+        # precompile regular expressions
+        self.rex_g = {}
+        self.g_params = ("X", "Y", "Z", "F", "I", "J", "K", "P", "R")
+        for g_param in self.g_params:
+            self.rex_g[g_param] = re.compile("%s([\+\-]?[\d\.]+)\D?" % g_param)
+        self.rex_m = {}
+        self.m_params = ("S", )
+        for m_param in self.m_params:
+            self.rex_m[m_param] = re.compile("%s([\+\-]?[\d\.]+)\D?" % m_param)
 
     def draw_grid(self):
         """
@@ -76,9 +85,8 @@ class Parser(object):
     def parse_g_params(self, line):
         """parse known Parameters to G-Commands"""
         result = {}
-        parameters = ("X", "Y", "Z", "F", "I", "J", "K", "P", "R")
-        for parameter in parameters:
-            match = re.search("%s([\+\-]?[\d\.]+)\D?" % parameter, line)
+        for parameter in self.g_params:
+            match = self.rex_g[parameter].search(line)
             if match:
                 result[parameter] = float(match.group(1))
         return(result)
@@ -86,9 +94,8 @@ class Parser(object):
     def parse_m_params(self, line):
         """parse known Parameters to M-Commands"""
         result = {}
-        parameters = ("S")
-        for parameter in parameters:
-            match = re.search("%s([\+\-]?[\d\.]+)\D?" % parameter, line)
+        for parameter in self.m_params:
+            match = self.rex_m[parameter].search(line)
             if match:
                 result[parameter] = float(match.group(1))
         return(result)

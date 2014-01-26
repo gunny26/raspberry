@@ -1,0 +1,462 @@
+       #/usr/bin/python
+       # -*- coding: utf-8 -*-
+       #
+       # parse Gcode
+       #
+       
+>>>>>> import sys
+>>>>>> import re
+>>>>>> import logging
+>>>>>> logging.basicConfig(level=logging.INFO, format="%(message)s")
+       # import inspect
+>>>>>> import math
+>>>>>> import pygame
+>>>>>> import time
+       # own modules
+>>>>>> from Point3d import Point3d as Point3d
+       
+       # wait for keypress, or wait amount of time
+       # AUTOMATIC = None
+>>>>>> AUTOMATIC = 0.01
+       # pygame Zoom faktor
+>>>>>> ZOOM = 4
+       
+>>>>>> class Controller(object):
+           """
+           Class to receive Gcode Commands and Statements
+           and also control a number of motors to do the motion
+       
+           Motors up to three
+           Spindle -> could be also a laser or something else
+           """
+       
+>>>>>>     def __init__(self, surface, resolution=1.0, default_speed=1.0, delay=100):
+               """
+               initialize Controller Object
+               @param
+               resolution -> 1.0 means 1 step 1 mm
+               for our purpose - laser engraver - 256 steps are 36mm so resultion is 36 / 256 = 0,1406
+               gcode mm to steps = 1 mm = 256/36 = 
+               """
+    1:         self.default_speed = default_speed
+    1:         self.resolution = resolution
+    1:         self.surface = surface
+    1:         self.delay = delay / 10000 # in ms
+               # initialize position
+    1:         self.position = Point3d(0, 0, 0)
+               # defaults to absolute movements
+    1:         self.move = self.move_abs
+               # defaults to millimeter
+    1:         self.unit = "millimeter"
+               # motors dict
+    1:         self.motors = {}
+    1:         self.spindle = None
+    1:         self.speed = 0.0
+               # pygame specificas to draw correct
+    1:         self.pygame_zoom = 1
+    1:         self.pygame_draw = True
+    1:         self.pygame_color = pygame.Color(255,255,255,255) 
+       
+>>>>>>     def get_position(self):
+>>>>>>         return(self.position)
+       
+>>>>>>     def get_direction(self, number):
+               """get direction of number"""
+26209:         return(int(number/abs(number)))
+       
+>>>>>>     def add_spindle(self, spindle_object):
+               """ add spindle to controller """
+    1:         self.spindle = spindle_object
+       
+>>>>>>     def add_motor(self, axis, motor_object):
+               """ add specific axis motor to controller """
+    3:         self.motors[axis] = motor_object
+       
+>>>>>>     def G00(self, *args):
+               """rapid motion with maximum speed"""
+               #logging.info("G00 called with %s", args)
+   55:         data = args[0]
+   55:         self.pygame_color = pygame.Color(50, 50, 50, 255)
+   55:         self.move(data)
+>>>>>>     G0 = G00
+       
+>>>>>>     def G01(self, *args):
+               """linear motion with given speed"""
+               #logging.info("G01 called with %s", args)
+  559:         data = args[0]
+  559:         self.pygame_color = pygame.Color(0, 128, 0, 255)
+               # self.set_speed(data)
+  559:         self.move(data)
+>>>>>>     G1 = G01
+       
+>>>>>>     def G02(self, *args):
+               """clockwise helical motion"""
+               #logging.info("G02 called with %s", args)
+  390:         data = args[0]
+  390:         self.pygame_color = pygame.Color(0, 0, 255, 255)
+  390:         if "F" not in data:
+  383:             data["F"] = self.default_speed
+  390:         if "P" not in data:
+  390:             data["P"] = 1
+  390:         assert type(data["P"]) == int
+  390:         self.__arc(data, -1)
+>>>>>>     G2 = G02
+       
+>>>>>>     def G03(self, *args):
+               """counterclockwise helical motion"""
+               #logging.info("G03 called with %s", args)
+  285:         data = args[0]
+  285:         self.pygame_color = pygame.Color(0, 255, 255, 255)
+  285:         if "F" not in data:
+  283:             data["F"] = self.default_speed
+  285:         if "P" not in data:
+  285:             data["P"] = 1
+  285:         assert type(data["P"]) == int
+  285:         self.__arc(data, 1)
+>>>>>>     G3 = G03
+       
+>>>>>>     def G04(self, *args):
+               """Dwell (no motion for P seconds)"""
+>>>>>>         logging.info("G04 called with %s", args)
+>>>>>>         data = args[0]
+>>>>>>         time.sleep(data["P"])
+>>>>>>     G4 = G04
+       
+>>>>>>     def G17(self, *args):
+               """Select XY Plane"""
+>>>>>>         logging.info("G17 called with %s", args)
+       
+>>>>>>     def G18(self, *args):
+               """Select XZ plane"""
+>>>>>>         logging.info("G18 called with %s", args)
+        
+>>>>>>     def G19(self, *args):
+               """Select YZ plane"""
+>>>>>>         logging.info("G19 called with %s", args)
+        
+>>>>>>     def G20(self, *args):
+               """Inches"""
+>>>>>>         logging.info("G20 called with %s", args)
+       
+>>>>>>     def G21(self, *args):
+               """Millimeters"""
+    1:         logging.info("G21 called with %s", args)
+       
+>>>>>>     def G54(self, *args):
+               """Select coordinate system"""
+>>>>>>         logging.info("G54 called with %s", args)
+       
+>>>>>>     def G90(self, *args):
+               """Absolute distance mode"""
+>>>>>>         logging.info("G90 called with %s", args)
+>>>>>>         self.move = self.move_abs
+       
+>>>>>>     def G91(self, *args):
+               """Incremental distance mode"""
+>>>>>>         logging.info("G91 called with %s", args)
+>>>>>>         self.move = self.move_inc
+       
+>>>>>>     def G94(self, *args):
+               """Units per minute feed rate"""
+>>>>>>         logging.info("G94 called with %s", args)
+       
+>>>>>>     def M2(self, *args):
+    1:         logging.debug("M2 called with %s", args)
+    1:         logging.info("M2 end the program")
+               # back to origin
+    1:         self.__goto(Point3d(0, 0, 0))
+               # unhold everything
+    4:         for axis, motor in self.motors.items():
+    3:             motor.unhold()
+               # stop spindle
+    1:         self.spindle.unhold()
+    1:         raise StandardError("M02 received, end of prgram")
+       
+>>>>>>     def M3(self, *args):
+    1:         logging.debug("M3 called with %s", args)
+    1:         logging.info("M3 start the spindle clockwise at the speed S")
+    1:         data = args[0]
+    1:         if "S" not in data :
+    1:             self.spindle.rotate(self.spindle.CW)
+               else:
+>>>>>>             self.spindle.rotate(self.spindle.CW, data["S"])
+                   
+>>>>>>     def M4(self, *args):
+>>>>>>         logging.debug("M4 called with %s", args)
+>>>>>>         logging.info("M4 start the spindle counter-clockwise at the speed S")
+>>>>>>         data = args[0]
+>>>>>>         if "S" not in data :
+>>>>>>             self.spindle.rotate(self.spindle.CCW)
+               else:
+>>>>>>             self.spindle.rotate(self.spindle.CCW, data["S"])
+       
+>>>>>>     def M5(self, *args):
+    1:         logging.debug("M5 called with %s", args)
+    1:         logging.info("M5 stop the spindle")
+    1:         data = args[0]
+    1:         self.spindle.unhold()
+       
+>>>>>>     def M6(self, *args):
+>>>>>>         logging.debug("M6 called with %s", args)
+>>>>>>         logging.info("M6 Tool change")
+       
+>>>>>>     def M7(self, *args):
+>>>>>>         logging.debug("M7 called with %s", args)
+>>>>>>         logging.info("M7 turn mist coolant on")
+       
+>>>>>>     def M8(self, *args):
+>>>>>>         logging.debug("M8 called with %s", args)
+>>>>>>         logging.info("M8 turn flood coolant on")
+       
+>>>>>>     def M9(self, *args):
+>>>>>>         logging.debug("M9 called with %s", args)
+>>>>>>         logging.info("M9 turn all coolant off")
+       
+>>>>>>     def __get_center(self, target, radius):
+>>>>>>         logging.info("__get_center called with %s", (target, radius))
+>>>>>>         d = target - self.position
+>>>>>>         x = d.X
+>>>>>>         y = d.Y
+>>>>>>         r = radius
+>>>>>>         logging.info("x=%s, y=%s, r=%s", x, y, r)
+>>>>>>         h_x2_div_d = math.sqrt(4 * r**2 - x**2 - y**2) / math.sqrt(x**2 + y**2)
+>>>>>>         i = (x - (y * h_x2_div_d))/2
+>>>>>>         j = (y + (x * h_x2_div_d))/2
+>>>>>>         return(Point3d(i, j, 0.0))
+       
+>>>>>>     def __arc(self, *args):
+               """
+               given actual position and 
+               x, y, z relative position of stop point on arc
+               i, j, k relative position of center
+       
+               i am not sure if this implementation is straight forward enough
+               semms more hacked than methematically correct
+               TODO: Improve
+               """
+               #logging.info("__arc called with %s", args)
+               #logging.debug("Actual Position at %s", self.position)
+  675:         data = args[0]
+  675:         ccw = args[1]
+               # correct some values if not specified
+  675:         if "X" not in data: data["X"] = self.position.X
+  675:         if "Y" not in data: data["Y"] = self.position.Y
+  675:         if "Z" not in data: data["Z"] = self.position.Z
+  675:         if "I" not in data: data["I"] = 0.0
+  675:         if "J" not in data: data["J"] = 0.0
+  675:         if "K" not in data: data["K"] = 0.0
+  675:         target = Point3d(data["X"], data["Y"], data["Z"])
+               #logging.debug("Endpoint of arc at %s", target)
+               # either R or IJK are given
+  675:         offset = None
+  675:         if "R" in data:
+>>>>>>             offset = self.__get_center(target, data["R"])
+               else:
+  675:             offset = Point3d(data["I"], data["J"], data["K"])
+               #logging.debug("Offset = %s", offset)
+  675:         center = self.position + offset
+               #logging.debug("Center of arc at %s", center)
+  675:         radius = offset.length()
+               #logging.debug("Radius: %s", radius)
+               # get the angle bewteen the two vectors
+  675:         target_vec = (target - center).unit()
+               #logging.debug("target_vec : %s; angle %s", target_vec, target_vec.angle())
+  675:         position_vec = (self.position - center).unit()
+               #logging.debug("position_vec : %s; angle %s", position_vec, position_vec.angle())
+  675:         angle = target_vec.angle_between(position_vec)
+               #logging.debug("angle between target and position is %s", target_vec.angle_between(position_vec))
+  675:         start_angle = None
+  675:         stop_angle = None
+  675:         angle_step = math.pi / 180
+               # shortcut, if angle is very small, make a straight line
+  675:         if abs(angle) <= angle_step:
+   58:             self.__goto(target)
+   58:             return
+  617:         if ccw == 1:
+                   # G3 movement
+                   # angle step will be added
+                   # target angle should be greater than position angle
+                   # if not so correct target_angle = 2 * math.pi - target_angle 
+  266:             if target_vec.angle() < position_vec.angle():
+>>>>>>                 start_angle = position_vec.angle()
+>>>>>>                 stop_angle = 2 * math.pi - target_vec.angle()
+                   else:
+  266:                 start_angle = position_vec.angle()
+  266:                 stop_angle = target_vec.angle()
+               else:
+                   # G2 movement
+                   # so clockwise, step must be negative
+                   # target angle should be smaller than position angle
+                   # if not correct target_angle = 2 * math.pi - target_angle
+  351:             angle_step = -angle_step
+                   # should go from position to target
+  351:             if target_vec.angle() > position_vec.angle():
+>>>>>>                 start_angle = position_vec.angle()
+>>>>>>                 stop_angle = 2 * math.pi - target_vec.angle()
+                   else:
+  351:                 start_angle = position_vec.angle()
+  351:                 stop_angle = target_vec.angle()
+               # this indicates a full circle
+  617:         if start_angle == stop_angle:
+>>>>>>             stop_angle += math.pi * 2
+  617:         angle_steps = abs(int((start_angle - stop_angle) / angle_step))
+               #logging.debug("Arc from %s rad to %s rad with %s steps in %s radians", start_angle, stop_angle, angle_steps, angle_step)
+  617:         inv_offset = offset * -1
+               #logging.debug("Inverse Offset vector : %s", inv_offset)
+  617:         angle = angle_step * angle_steps
+ 5650:         while abs(angle) > abs(angle_step):
+ 5033:             inv_offset = inv_offset.rotated_Z(angle_step)
+ 5033:             self.__goto(center + inv_offset)
+ 5033:             angle -= angle_step
+                   #logging.debug("angle=%s, start_angle=%s, stop_angle=%s", start_angle + angle, start_angle, stop_angle)
+               # rotate last tiny fraction left
+  617:         inv_offset = inv_offset.rotated_Z(angle_step)
+  617:         self.__goto(center + inv_offset)
+               # calculate drift of whole arc
+  617:         arc_drift = self.position - target
+               #logging.debug("Arc-Drift: Actual=%s, Target=%s, Drift=%s(%s)", self.position, target, arc_drift, arc_drift.length())
+  617:         assert arc_drift.length() < Point3d(1.0, 1.0, 1.0).length()
+  617:         self.__drift_management(target)
+       
+>>>>>>     def __drift_management(self, target):
+               """can be called to get closer to target"""
+  617:         drift = self.position - target
+               #logging.debug("Drift-Management-before: Actual=%s, Target=%s, Drift=%s(%s)", self.position, target, drift, drift.length())
+  617:         assert drift.length() < Point3d(1.0, 1.0, 1.0).length()
+  617:         self.__goto(target)
+  617:         drift = self.position - target
+               #logging.debug("Drift-Management-after: Actual=%s, Target=%s, Drift=%s(%s)", self.position, target, drift, drift.length())
+  617:         assert drift.length() < Point3d(1.0, 1.0, 1.0).length()
+       
+>>>>>>     def __step(self, *args):
+               """
+               method to initialize single steps on the different axis
+               the size here is already steps, not units as mm or inches
+               scaling is done in __goto
+               """
+               #logging.debug("__step called with %s", args)
+14703:         data = args[0]
+58812:         for axis in ("X", "Y", "Z"):
+44109:             step = data.__dict__[axis]
+44109:             assert -1.0 <= step <= 1.0
+44109:             if step == 0.0 : 
+17900:                 continue
+26209:             direction = self.get_direction(step)
+26209:             self.motors[axis].move_float(direction, abs(step))
+       
+>>>>>>     def __goto(self, target):
+               """
+               calculate vector between actual position and target position
+               scale this vector to motor-steps-units und split the
+               vector in unit vectors with length 1, to control single motor steps
+               """
+               #logging.debug("__goto called with %s", target)
+               #logging.debug("moving from %s mm to %s mm", self.position, target)
+               #logging.debug("moving from %s steps to %s steps", self.position * self.resolution, target * self.resolution)
+ 6940:         move_vec = target - self.position
+ 6940:         if move_vec.length() == 0.0:
+                   #logging.info("move_vec is zero, nothing to draw")
+                   # no movement at all
+   17:             return
+ 6923:         move_vec_unit = move_vec.unit()
+               # steps on each axes to move
+               # scale from mm to steps
+ 6923:         move_vec_steps = move_vec * self.resolution
+ 6923:         move_vec_steps_unit = move_vec_steps.unit()
+               #logging.error("move_vec_steps_unit=%s", move_vec_steps_unit)
+               #logging.error("scaled %s mm to %s steps", move_vec, move_vec_steps)
+ 6923:         length_unit = move_vec_steps_unit.length()
+ 6923:         length = move_vec_steps.length()
+               #logging.error("move_vec_steps.length() = %s", move_vec_steps.length())        
+               # use while loop the get to the exact value
+14703:         while move_vec_steps.length() > 1.0:
+ 7780:             self.__step(move_vec_steps_unit)
+                   #logging.error("actual length left to draw in tiny steps: %f", move_vec_steps.length())
+ 7780:             move_vec_steps = move_vec_steps - move_vec_steps_unit
+               # the last fraction left
+ 6923:         self.__step(move_vec_steps)
+ 6923:         if self.surface is not None:
+ 6923:             self.pygame_update(target)
+ 6923:         self.position = target
+               # after move check controller position with motor positions
+ 6923:         motor_position = Point3d(self.motors["X"].get_position(), self.motors["Y"].get_position(), self.motors["Z"].get_position())
+ 6923:         drift = self.position * self.resolution - motor_position
+               #logging.debug("Target Drift: Actual=%s; Target=%s; Drift=%s", self.position, target, self.position - target)
+               #logging.debug("Steps-Drift : Motor=%s; Drift %s length=%s; Spindle: %s", \
+               #    motor_position, drift, drift.length(), self.spindle.get_state())
+               # drift should not be more than 1 step
+               # drift could be in any direction 0.999...
+ 6923:         assert drift.length() < Point3d(1.0, 1.0, 1.0).length()
+               #logging.info("Unit-Drift: Motor: %s; Drift %s; Spindle: %s", \
+               #    motor_position / self.resolution, self.position - motor_position / self.resolution, self.spindle.get_state())
+       
+>>>>>>     def pygame_update(self, newposition):
+ 6923:         pan_x = self.surface.get_width() / 2
+ 6923:         pan_y = self.surface.get_height() / 2
+ 6923:         start = (self.resolution* self.position.X, self.resolution * self.position.Y)
+ 6923:         stop = (self.resolution * newposition.X, self.resolution * newposition.Y)
+ 6923:         color = pygame.Color(0, 50, 0, 255)
+ 6923:         if self.motors["Z"].position < 0:
+ 6884:             color = pygame.Color(0, 0, 255, 255)
+ 6923:         if self.pygame_draw:
+ 6923:             pygame.draw.line(self.surface, self.pygame_color, start, stop, 1)
+               # set red dot at motor position
+ 6923:         self.surface.set_at((self.motors["X"].position, self.motors["Y"].position), pygame.Color(255,0,0,255))
+ 6923:         pygame.display.flip()
+       
+>>>>>>     def set_speed(self, *args):
+               """
+               set speed, if data["F"] is given, defaults to default_speed if not specified
+               """
+>>>>>>         data = args[0]
+>>>>>>         if "F" in data:
+>>>>>>             self.speed = data["F"]
+               else:
+>>>>>>             self.speed = self.default_speed
+       
+>>>>>>     def move_inc(self, stepx, stepy):
+               """
+               incremental movement, parameter represents relative position change
+               move to given x,y ccordinates
+               x,y are given relative to actual position
+       
+               so to move in both direction at the same time,
+               parameter x or y has to be sometime float
+               """
+               #logging.info("move_inc called with %s", args)
+>>>>>>         data = args[0]
+>>>>>>         target = Point3d(0, 0, 0)
+>>>>>>         for axis in ("X", "Y", "Z"):
+>>>>>>             if axis in data:
+>>>>>>                 target.__dict__[axis] = self.position.__dict__[axis] + data[axis]
+                   else:
+>>>>>>                 target.__dict__[axis] = self.position.__dict__[axis]
+               #logging.info("target = %s", target)
+>>>>>>         self.__goto(target)
+       
+>>>>>>     def move_abs(self, *args):
+               """
+               absolute movement to position
+               args[X,Y,Z] are interpreted as absolute positions
+               it is not necessary to give alle three axis, when no value is
+               present, there is not movement on this axis
+               """
+               #logging.info("move_abs called with %s", args)
+  614:         data = args[0]
+  614:         if data is None: return
+  614:         target = Point3d(0.0, 0.0, 0.0)
+ 2456:         for axis in ("X", "Y", "Z"):
+ 1842:             if axis in data:
+ 1715:                 target.__dict__[axis] = data[axis]
+                   else:
+  127:                 target.__dict__[axis] = self.position.__dict__[axis]
+               #logging.info("target = %s", target)
+  614:         self.__goto(target)
+       
+>>>>>>     def __getattr__(self, name):
+>>>>>>         def method(*args):
+>>>>>>             logging.info("tried to handle unknown method " + name)
+>>>>>>             if args:
+>>>>>>                 logging.info("it had arguments: " + str(args))
+>>>>>>         return method
+       

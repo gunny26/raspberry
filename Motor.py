@@ -32,33 +32,34 @@ class Motor(object):
         this method is called from controller
         float_step is bewtween 0.0 < 1.0
         """
-        logging.debug("move_float called with %d, %f", direction, float_step)
+        #logging.debug("move_float called with %d, %f", direction, float_step)
         assert type(direction) == int
         assert (direction == -1) or (direction == 1)
         assert 0.0 <= float_step <= 1.0
         self.float_position += (float_step * direction)
         distance = abs(self.position - self.float_position)
         if distance >= 1.0:
-            logging.debug("initializing full step, distance %s > 1.0", distance) 
-            self.__move(direction)
-        else:
-            logging.debug("distance %s to small to initialize full step", distance)
+            #logging.debug("initializing full step, distance %s > 1.0", distance) 
+            self._move(direction)
+        #else:
+            #logging.debug("distance %s to small to initialize full step", distance)
         distance = abs(self.float_position - self.position)
-        logging.debug("int_position = %d : float_position = %f : distance = %f", self.position, self.float_position, distance)
+        #logging.debug("int_position = %d : float_position = %f : distance = %f", self.position, self.float_position, distance)
         # final distance between exact float and real int must be lesser than 1.0
         assert distance < 1.0
 
-    def __move(self, direction):
+    def _move(self, direction):
         """
         move number of full integer steps
         """
-        logging.debug("Moving Motor One step in direction %s", direction)
-        logging.debug("Motor accuracy +/- %s", self.position - self.float_position)
+        #logging.debug("Moving Motor One step in direction %s", direction)
+        #logging.debug("Motor accuracy +/- %s", self.position - self.float_position)
         self.position += direction
 
     def unhold(self):
         """release power"""
-        logging.info("Unholding Motor Coils")
+        #logging.info("Unholding Motor Coils")
+        pass
 
     def get_position(self):
         """return real position as int"""
@@ -78,7 +79,7 @@ class LaserMotor(Motor):
         GPIO.setup(self.laser_pin, GPIO.OUT)
         GPIO.setup(self.laser_pin, 0)
  
-    def __move(self, direction):
+    def _move(self, direction):
         """move number of full integer steps"""
         self.position += direction
         # turn on laser if position < 0
@@ -149,7 +150,7 @@ class BipolarStepperMotor(Motor):
             GPIO.setup(pin, 0)
         self.num_sequence = len(self.SEQUENCE)
 
-    def __move(self, direction):
+    def _move(self, direction):
         """
         move to given direction number of steps, its relative
         delay_faktor could be set, if this Motor is connected to a controller
