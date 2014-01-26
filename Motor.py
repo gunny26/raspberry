@@ -39,10 +39,17 @@ class Motor(object):
         self.float_position += (float_step * direction)
         distance = abs(self.position - self.float_position)
         if distance >= 1.0:
+<<<<<<< HEAD
             #logging.debug("initializing full step, distance %s > 1.0", distance) 
             self._move(direction)
         #else:
             #logging.debug("distance %s to small to initialize full step", distance)
+=======
+            logging.debug("initializing full step, distance %s > 1.0", distance) 
+            self._move(direction)
+        else:
+            logging.debug("distance %s to small to initialize full step", distance)
+>>>>>>> a47e27d747ff34819aeeb2c181a90f0b5c260cb5
         distance = abs(self.float_position - self.position)
         #logging.debug("int_position = %d : float_position = %f : distance = %f", self.position, self.float_position, distance)
         # final distance between exact float and real int must be lesser than 1.0
