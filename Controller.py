@@ -30,7 +30,7 @@ class Controller(object):
     Spindle -> could be also a laser or something else
     """
 
-    def __init__(self, surface, resolution=1.0, default_speed=1.0):
+    def __init__(self, surface, resolution=1.0, default_speed=1.0, delay=100):
         """
         initialize Controller Object
         @param
@@ -41,6 +41,7 @@ class Controller(object):
         self.default_speed = default_speed
         self.resolution = resolution
         self.surface = surface
+        self.delay = 100 / 10000 # in ms
         # initialize position
         self.position = Point3d(0, 0, 0)
         # defaults to absolute movements
@@ -317,7 +318,7 @@ class Controller(object):
         the size here is already steps, not units as mm or inches
         scaling is done in __goto
         """
-        logging.info("%s called with %s", inspect.stack()[0][3], args)
+        logging.debug("%s called with %s", inspect.stack()[0][3], args)
         data = args[0]
         for axis in ("X", "Y", "Z"):
             step = data.__dict__[axis]
@@ -332,9 +333,9 @@ class Controller(object):
         method to move to position given
         position is absolute
         """
-        logging.info("%s called with %s", inspect.stack()[0][3], target)
-        logging.error("moving from %s mm to %s mm", self.position, target)
-        logging.error("moving from %s steps to %s steps", self.position * self.resolution, target * self.resolution)
+        logging.debug("%s called with %s", inspect.stack()[0][3], target)
+        logging.debug("moving from %s mm to %s mm", self.position, target)
+        logging.debug("moving from %s steps to %s steps", self.position * self.resolution, target * self.resolution)
         move_vec = target - self.position
         if move_vec.length() == 0.0:
             logging.info("No Movement detected")
@@ -345,7 +346,7 @@ class Controller(object):
         # scale from mm to steps
         move_vec_steps = move_vec * self.resolution
         move_vec_steps_unit = move_vec_steps.unit()
-        logging.error("scaled %s mm to %s steps", move_vec, move_vec_steps)
+        logging.info("scaled %s mm to %s steps", move_vec, move_vec_steps)
         for _ in range(int(move_vec_steps.length())):
             self.__step(move_vec_steps_unit)
         if self.surface is not None:

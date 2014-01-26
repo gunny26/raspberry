@@ -39,12 +39,12 @@ class Parser(object):
     def __init__(self, surface):
         self.surface = surface
         # build our controller
-        self.controller = Controller(surface=surface, resolution=256/36, default_speed=1.0)
-        self.controller.add_motor("X", BipolarStepperMotor(coils=(4, 17, 27, 22), delay=33, max_position=256, min_position=0))
-        self.controller.add_motor("Y", BipolarStepperMotor(coils=(24, 25, 7, 8), delay=33, max_position=256, min_position=0))
+        self.controller = Controller(surface=surface, resolution=256/36, default_speed=1.0, delay=15)
+        self.controller.add_motor("X", BipolarStepperMotor(coils=(4, 17, 27, 22), max_position=256, min_position=0))
+        self.controller.add_motor("Y", BipolarStepperMotor(coils=(24, 25, 7, 8), max_position=256, min_position=0))
         #self.controller.add_motor("X", Motor())
         #self.controller.add_motor("Y", Motor())
-        self.controller.add_motor("Z", Motor(delay=33, min_position=-10000, max_position=10000))
+        self.controller.add_motor("Z", Motor(min_position=-10000, max_position=10000))
         self.controller.add_spindle(Laser(power_pin=14))
         #self.controller.add_spindle(Spindle())
         self.last_g_code = None

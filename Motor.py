@@ -15,11 +15,10 @@ import time
 class Motor(object):
     """Abstract Class for Motor"""
 
-    def __init__(self, max_position, min_position, delay=1.0):
+    def __init__(self, max_position, min_position):
         self.float_position = 0.0
         self.max_position = max_position
         self.min_position = min_position
-        self.delay = delay / 10000
         # define
         self.position = 0.0
 
@@ -46,7 +45,6 @@ class Motor(object):
         logging.debug("Moving Motor One step in direction %s", direction)
         logging.debug("Motor accuracy +/- %s", self.position - self.float_position)
         self.position += direction
-        time.sleep(self.delay)
 
     def unhold(self):
         logging.info("Unholding Motor Coils")
@@ -71,14 +69,15 @@ class BipolarStepperMotor(Motor):
     # ok
     SEQUENCE = [(1,0,0,0), (0,0,1,0), (0,1,0,0), (0,0,0,1)]
     # also ok
-    SEQUENCE = [(1,0,0,0), (1,0,1,0), (0,0,1,0), (0,1,1,0), (0,1,0,0), (0,1,0,1), (0,0,0,1), (1,0,0,1)]
+    # SEQUENCE = [(1,0,0,0), (1,0,1,0), (0,0,1,0), (0,1,1,0), (0,1,0,0), (0,1,0,1), (0,0,0,1), (1,0,0,1)]
+    # ok
+    SEQUENCE = [(1,0,1,0), (0,1,1,0), (0,1,0,1), (1,0,0,1)]
 
-    def __init__(self, coils, delay, max_position, min_position):
+    def __init__(self, coils, max_position, min_position):
         """init"""
         self.coils = coils
         self.max_position = max_position
         self.min_position = min_position
-        self.delay = int(delay) / 1000.0
         # define coil pins as output
         for pin in self.coils:
             GPIO.setup(pin, GPIO.OUT)
@@ -122,7 +121,6 @@ class BipolarStepperMotor(Motor):
         logging.debug("_move position = %s : float_position = %s", self.position, self.float_position)
         assert self.min_position <= self.position <= self.max_position
         # give motor a chance to move
-        time.sleep(self.delay)
 
     def unhold(self):
         """
