@@ -41,7 +41,7 @@ class Controller(object):
         self.default_speed = default_speed
         self.resolution = resolution
         self.surface = surface
-        self.delay = 100 / 10000 # in ms
+        self.delay = delay / 10000 # in ms
         # initialize position
         self.position = Point3d(0, 0, 0)
         # defaults to absolute movements
@@ -270,6 +270,10 @@ class Controller(object):
         start_angle = None
         stop_angle = None
         angle_step = math.pi / 180
+        # shortcut, if angle is very small, make a straight line
+        if abs(angle) <= angle_step:
+            self.__goto(target)
+            return
         if ccw == 1:
             # G3 movement
             # angle step will be added

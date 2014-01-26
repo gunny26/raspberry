@@ -14,11 +14,9 @@ except ImportError:
 import sys
 import re
 import inspect
-import math
 import pygame
 import time
 # own modules
-from Point3d import Point3d as Point3d
 from Motor import Motor as Motor
 from Motor import BipolarStepperMotor as BipolarStepperMotor
 from Motor import LaserMotor as LaserMotor
@@ -115,13 +113,15 @@ class Parser(object):
         """
         read input file line by line, and parse gcode Commands
         """
-        for line in open("output_0001.ngc", "rb"):
+        for line in open("output_0005.ngc", "rb"):
             # cleanup line
             line = line.strip()
             line = line.upper()
             # filter out some incorrect lines
-            if len(line) == 0: continue
-            if line[0] == "%": continue
+            if len(line) == 0: 
+                continue
+            if line[0] == "%": 
+                continue
             # start of parsing
             logging.info("-" * 80)
             if line[0] == "(":
@@ -166,32 +166,37 @@ class Parser(object):
         while (pygame.event.wait().type != pygame.KEYDOWN): pass
 
 
-if __name__ == "__main__":
+def safe_position():
+    for pin in (4, 2, 27, 22, 23, 14, 24, 25, 7, 8):
+        GPIO.setup(pin, GPIO.OUT)
+        GPIO.output(pin, 0)
+
+def main(): 
     # bring GPIO to a clean state
     GPIO.cleanup()
     GPIO.setmode(GPIO.BCM)
     try:
         logging.info("Initializing all GPIO Pins, and set state LOW")
-        for pin in (4, 2, 27, 22, 23, 14, 24, 25, 7, 8):
-            GPIO.setup(pin, GPIO.OUT)
-            GPIO.output(pin, 0)
-        logging.info("Please move positions to zero")
+        safe_position()
+        logging.info("Please move positions to origin")
         key = raw_input("Press any KEY when done")
+        logging.info("Initialize GPIO Modes")
         GPIO.setup(23, GPIO.OUT)
         GPIO.output(23, 1)
         GPIO.setup(14, GPIO.OUT)
         GPIO.output(14, 0)
         key = raw_input("Press and KEY to start parsing")
         pygame.init()
-        surface = pygame.display.set_mode((400, 400))
+        surface = pygame.display.set_mode((530, 530))
         surface.fill((0, 0, 0))
         pygame.display.flip()
         parser = Parser(surface=surface)
         parser.read()
     except Exception, exc:
         logging.exception(exc)
-        GPIO.output(23, 0)
-        GPIO.output(14, 0)
+        safe_position()
         GPIO.cleanup()
     pygame.quit()
 
+if __name__ == "__main__":
+    main()

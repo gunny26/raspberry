@@ -3,6 +3,9 @@
 #
 # parse Gcode
 #
+"""
+Motor Classes for Controller
+"""
 
 try:
     import RPi.GPIO as GPIO
@@ -10,17 +13,19 @@ except ImportError:
     from FakeGPIO import FakeGPIO as GPIO
 import logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
-import time
 
 class Motor(object):
-    """Abstract Class for Motor"""
+    """
+    Abstract Class for Motor
+    usually you have to overwrite __move and unhold methods
+    """
 
     def __init__(self, max_position, min_position):
-        self.float_position = 0.0
         self.max_position = max_position
         self.min_position = min_position
         # define
-        self.position = 0.0
+        self.position = 0
+        self.float_position = 0.0
 
     def move_float(self, direction, float_step):
         """
@@ -31,12 +36,17 @@ class Motor(object):
         assert type(direction) == int
         assert (direction == -1) or (direction == 1)
         assert 0.0 <= float_step <= 1.0
-        self.float_position += float_step * direction
-        logging.debug("move_float position = %d : float_position = %f", self.position, self.float_position)
-        logging.debug("Float to Int Value: %f", abs(self.position - self.float_position))
-        while abs(self.position - self.float_position) >= float(1):
+        self.float_position += (float_step * direction)
+        distance = abs(self.position - self.float_position)
+        if distance >= 1.0:
+            logging.debug("initializing full step, distance %s > 1.0", distance) 
             self.__move(direction)
-        assert abs(self.position - self.float_position) < float(1)
+        else:
+            logging.debug("distance %s to small to initialize full step", distance)
+        distance = abs(self.float_position - self.position)
+        logging.debug("int_position = %d : float_position = %f : distance = %f", self.position, self.float_position, distance)
+        # final distance between exact float and real int must be lesser than 1.0
+        assert distance < 1.0
 
     def __move(self, direction):
         """
@@ -47,49 +57,29 @@ class Motor(object):
         self.position += direction
 
     def unhold(self):
+        """release power"""
         logging.info("Unholding Motor Coils")
 
     def get_position(self):
+        """return real position as int"""
         return(self.position)
 
-    def get_position_float(self):
-        return(self.position_float)
+    def get_float_position(self):
+        """return exact position as float"""
+        return(self.float_position)
 
 
 class LaserMotor(Motor):
     """Laser Motor, reactive if axis moves negative"""
 
     def __init__(self, laser_pin, max_position, min_position):
+        Motor.__init__(self, max_position, min_position)
         self.laser_pin = laser_pin
-        self.float_position = 0.0
-        self.max_position = max_position
-        self.min_position = min_position
-        # define
-        self.position = 0.0
         GPIO.setup(self.laser_pin, GPIO.OUT)
         GPIO.setup(self.laser_pin, 0)
  
-    def move_float(self, direction, float_step):
-        """
-        this method is called from controller
-        float_step is bewtween 0.0 < 1.0
-        """
-        logging.debug("move_float called with %d, %f", direction, float_step)
-        assert type(direction) == int
-        assert (direction == -1) or (direction == 1)
-        assert 0.0 <= float_step <= 1.0
-        self.float_position += float_step * direction
-        distance = abs(self.float_position - self.position)
-        if distance >= 1.0:
-            self.__move(direction)
-        distance = abs(self.float_position - self.position)
-        logging.debug("int_position = %d : float_position = %f : distance = %f", self.position, self.float_position, distance)
-        assert distance < 1.0
-
     def __move(self, direction):
-        """
-        move number of full integer steps
-        """
+        """move number of full integer steps"""
         self.position += direction
         # turn on laser if position < 0
         if self.position < 0.0:
@@ -98,13 +88,8 @@ class LaserMotor(Motor):
             GPIO.output(self.laser_pin, 0)
 
     def unhold(self):
+        """power off"""
         logging.info("Power off laser")
-
-    def get_position(self):
-        return(self.position)
-
-    def get_position_float(self):
-        return(self.position_float)
 
 
 class BipolarStepperMotor(Motor):
@@ -156,38 +141,13 @@ class BipolarStepperMotor(Motor):
 
     def __init__(self, coils, max_position, min_position):
         """init"""
+        Motor.__init__(self, max_position, min_position)
         self.coils = coils
-        self.max_position = max_position
-        self.min_position = min_position
         # define coil pins as output
         for pin in self.coils:
             GPIO.setup(pin, GPIO.OUT)
             GPIO.setup(pin, 0)
-        # original one from adafruit
         self.num_sequence = len(self.SEQUENCE)
-        # initial position to self.min_position
-        self.position = 0
-        self.float_position = float(self.position)
-
-    def move_float(self, direction, float_step):
-        """
-        this method is called from controller
-        float_step is bewtween 0.0 < 1.0
-        """
-        logging.debug("move_float called with %d, %f", direction, float_step)
-        assert type(direction) == int
-        assert (direction == -1) or (direction == 1)
-        assert 0.0 <= float_step <= 1.0
-        self.float_position += (float_step * direction)
-        distance = abs(self.position - self.float_position)
-        if distance >= 1.0:
-            logging.debug("initializing full step, distance %s > 1.0", distance) 
-            self.__move(direction)
-        else:
-            logging.debug("distance %s to small to initialize full step", distance)
-        distance = abs(self.float_position - self.position)
-        logging.debug("int_position = %d : float_position = %f : distance = %f", self.position, self.float_position, distance)
-        assert distance < 1.0
 
     def __move(self, direction):
         """
