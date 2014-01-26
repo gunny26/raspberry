@@ -53,7 +53,7 @@ class Controller(object):
         self.spindle = None
         self.speed = 0.0
         # pygame specificas to draw correct
-        self.pygame_zoom = ZOOM
+        self.pygame_zoom = 1
         self.pygame_draw = True
         self.pygame_color = pygame.Color(255,255,255,255) 
 
@@ -298,25 +298,33 @@ class Controller(object):
         if start_angle == stop_angle:
             stop_angle += math.pi * 2
         angle_steps = abs(int((start_angle - stop_angle) / angle_step))
-        logging.info("Arc from %s rad to %s rad wtih %s steps in %s radians", start_angle, stop_angle, angle_steps, angle_step)
+        logging.info("Arc from %s rad to %s rad with %s steps in %s radians", start_angle, stop_angle, angle_steps, angle_step)
         inv_offset = offset * -1
         logging.error("Inverse Offset vector : %s", inv_offset)
-        angle = angle_step
-        while (start_angle + angle) < stop_angle:
-        #for _ in range(angle_steps):
-            newposition = center + inv_offset.rotated_Z(angle)
-            self.__goto(newposition)
-            angle += angle_step
-        # there is almost always a minimal gap to target angle,
-        # lets do this last rotation exactly
-        #newposition = center + inv_offset.rotated_Z(angle)
-        #self.__goto(newposition)
-        logging.info("stopping at angle %s, should be %s", start_angle + angle, stop_angle)
-        # Correction, after all we are maybe not at target
-        logging.error("Arc-Drift: Actual=%s, Target=%s, Drift=%s", self.position, target, self.position-target)
-        #if self.position != target:
-        #    logging.error("Actual Position %s should be %s, correcting", self.position, target)
-        #    self.__goto(target)
+        angle = angle_step * angle_steps
+        while abs(angle) > abs(angle_step):
+            inv_offset = inv_offset.rotated_Z(angle_step)
+            self.__goto(center + inv_offset)
+            angle -= angle_step
+            logging.error("angle=%s, start_angle=%s, stop_angle=%s", start_angle + angle, start_angle, stop_angle)
+        # rotate last tiny fraction left
+        inv_offset = inv_offset.rotated_Z(angle_step)
+        self.__goto(center + inv_offset)
+        # calculate drift of whole arc
+        arc_drift = self.position - target
+        logging.error("Arc-Drift: Actual=%s, Target=%s, Drift=%s(%s)", self.position, target, arc_drift, arc_drift.length())
+        assert arc_drift.length() < Point3d(1.0, 1.0, 1.0).length()
+        self.__drift_management(target)
+
+    def __drift_management(self, target):
+        """can be called to get closer to target"""
+        drift = self.position - target
+        logging.error("Drift-Management-before: Actual=%s, Target=%s, Drift=%s(%s)", self.position, target, drift, drift.length())
+        assert drift.length() < Point3d(1.0, 1.0, 1.0).length()
+        self.__goto(target)
+        drift = self.position - target
+        logging.error("Drift-Management-after: Actual=%s, Target=%s, Drift=%s(%s)", self.position, target, drift, drift.length())
+        assert drift.length() < Point3d(1.0, 1.0, 1.0).length()
 
     def __step(self, *args):
         """
@@ -371,8 +379,8 @@ class Controller(object):
         # after move check controller position with motor positions
         motor_position = Point3d(self.motors["X"].get_position(), self.motors["Y"].get_position(), self.motors["Z"].get_position())
         drift = self.position * self.resolution - motor_position
-        logging.error("Target Drift: Actual=%s; Target=%s; Drift=%s", self.position, target, self.position - target)
-        logging.error("Steps-Drift : Motor=%s; Drift %s length=%s; Spindle: %s", \
+        logging.debug("Target Drift: Actual=%s; Target=%s; Drift=%s", self.position, target, self.position - target)
+        logging.debug("Steps-Drift : Motor=%s; Drift %s length=%s; Spindle: %s", \
             motor_position, drift, drift.length(), self.spindle.get_state())
         # drift should not be more than 1 step
         # drift could be in any direction 0.999...
@@ -383,8 +391,8 @@ class Controller(object):
     def pygame_update(self, newposition):
         pan_x = self.surface.get_width() / 2
         pan_y = self.surface.get_height() / 2
-        start = (self.pygame_zoom * self.position.X, self.resolution * self.position.Y)
-        stop = (self.pygame_zoom * newposition.X, self.resolution * newposition.Y)
+        start = (self.resolution* self.position.X, self.resolution * self.position.Y)
+        stop = (self.resolution * newposition.X, self.resolution * newposition.Y)
         color = pygame.Color(0, 50, 0, 255)
         if self.motors["Z"].position < 0:
             color = pygame.Color(0, 0, 255, 255)
