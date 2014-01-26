@@ -65,13 +65,43 @@ class BipolarStepperMotor(Motor):
     delay -> int(milliseconds to wait between moves
     max_position -> int(maximum position) is set to safe value of 1
     min_position -> int(minimum position) is set to 0
+        b1
+    a1      a1
+        b2
+
+    following seuqnece is possible (a1, a2, b1, b2)
+
+    low torque mode
+    1 0 0 0 a1
+    0 0 1 0 b1
+    0 1 0 0 a2
+    0 0 0 1 b2
+    
+    high torque mode - full step mode
+    1 0 1 0 between a1/b1
+    0 1 1 0 between b1/a2
+    0 1 0 1 between a2/b2
+    1 0 0 1 between b2/a1
+
+    mixed torque mode - half step mode
+    1 0 0 0 a1
+    1 0 1 0 between a1/b1
+    0 0 1 0 b1
+    0 1 1 0 between b1/a2
+    0 1 0 0 a2
+    0 1 0 1 between a2/b2
+    0 0 0 1 b2
+    1 0 0 1 between b2/a1
+
     """
+    # low torque mode - also low power as only one coil is powered
+    SEQUENCE_LOW = ((1,0,0,0), (0,0,1,0), (0,1,0,0), (0,0,0,1))
+    # high torque - full step mode
+    SEQUENCE_HIGH = ((1,0,1,0), (0,1,1,0), (0,1,0,1), (1,0,0,1))
+    # mixed torque - half step mode
+    SEQUENCE_MIXED = ((1,0,0,0), (1,0,1,0), (0,0,1,0), (0,1,1,0), (0,1,0,0), (0,1,0,1), (0,0,0,1), (1,0,0,1))
     # ok
-    SEQUENCE = [(1,0,0,0), (0,0,1,0), (0,1,0,0), (0,0,0,1)]
-    # also ok
-    # SEQUENCE = [(1,0,0,0), (1,0,1,0), (0,0,1,0), (0,1,1,0), (0,1,0,0), (0,1,0,1), (0,0,0,1), (1,0,0,1)]
-    # ok
-    SEQUENCE = [(1,0,1,0), (0,1,1,0), (0,1,0,1), (1,0,0,1)]
+    SEQUENCE = SEQUENCE_LOW
 
     def __init__(self, coils, max_position, min_position):
         """init"""
