@@ -237,7 +237,7 @@ class Controller(object):
         TODO: Improve
         """
         logging.info("%s called with %s", inspect.stack()[0][3], args)
-        logging.info("Actual Position at %s", self.position)
+        logging.debug("Actual Position at %s", self.position)
         data = args[0]
         ccw = args[1]
         # correct some values if not specified
@@ -248,25 +248,25 @@ class Controller(object):
         if "J" not in data: data["J"] = 0.0
         if "K" not in data: data["K"] = 0.0
         target = Point3d(data["X"], data["Y"], data["Z"])
-        logging.info("Endpoint of arc at %s", target)
+        logging.debug("Endpoint of arc at %s", target)
         # either R or IJK are given
         offset = None
         if "R" in data:
             offset = self.__get_center(target, data["R"])
         else:
             offset = Point3d(data["I"], data["J"], data["K"])
-        logging.info("Offset = %s", offset)
+        logging.debug("Offset = %s", offset)
         center = self.position + offset
-        logging.info("Center of arc at %s", center)
+        logging.debug("Center of arc at %s", center)
         radius = offset.length()
-        logging.info("Radius: %s", radius)
+        logging.debug("Radius: %s", radius)
         # get the angle bewteen the two vectors
         target_vec = (target - center).unit()
-        logging.info("target_vec : %s; angle %s", target_vec, target_vec.angle())
+        logging.debug("target_vec : %s; angle %s", target_vec, target_vec.angle())
         position_vec = (self.position - center).unit()
-        logging.info("position_vec : %s; angle %s", position_vec, position_vec.angle())
+        logging.debug("position_vec : %s; angle %s", position_vec, position_vec.angle())
         angle = target_vec.angle_between(position_vec)
-        logging.info("angle between target and position is %s", target_vec.angle_between(position_vec))
+        logging.debug("angle between target and position is %s", target_vec.angle_between(position_vec))
         start_angle = None
         stop_angle = None
         angle_step = math.pi / 180
@@ -302,32 +302,32 @@ class Controller(object):
         if start_angle == stop_angle:
             stop_angle += math.pi * 2
         angle_steps = abs(int((start_angle - stop_angle) / angle_step))
-        logging.info("Arc from %s rad to %s rad with %s steps in %s radians", start_angle, stop_angle, angle_steps, angle_step)
+        logging.debug("Arc from %s rad to %s rad with %s steps in %s radians", start_angle, stop_angle, angle_steps, angle_step)
         inv_offset = offset * -1
-        logging.error("Inverse Offset vector : %s", inv_offset)
+        logging.debug("Inverse Offset vector : %s", inv_offset)
         angle = angle_step * angle_steps
         while abs(angle) > abs(angle_step):
             inv_offset = inv_offset.rotated_Z(angle_step)
             self.__goto(center + inv_offset)
             angle -= angle_step
-            logging.error("angle=%s, start_angle=%s, stop_angle=%s", start_angle + angle, start_angle, stop_angle)
+            logging.debug("angle=%s, start_angle=%s, stop_angle=%s", start_angle + angle, start_angle, stop_angle)
         # rotate last tiny fraction left
         inv_offset = inv_offset.rotated_Z(angle_step)
         self.__goto(center + inv_offset)
         # calculate drift of whole arc
         arc_drift = self.position - target
-        logging.error("Arc-Drift: Actual=%s, Target=%s, Drift=%s(%s)", self.position, target, arc_drift, arc_drift.length())
+        logging.debug("Arc-Drift: Actual=%s, Target=%s, Drift=%s(%s)", self.position, target, arc_drift, arc_drift.length())
         assert arc_drift.length() < Point3d(1.0, 1.0, 1.0).length()
         self.__drift_management(target)
 
     def __drift_management(self, target):
         """can be called to get closer to target"""
         drift = self.position - target
-        logging.error("Drift-Management-before: Actual=%s, Target=%s, Drift=%s(%s)", self.position, target, drift, drift.length())
+        logging.debug("Drift-Management-before: Actual=%s, Target=%s, Drift=%s(%s)", self.position, target, drift, drift.length())
         assert drift.length() < Point3d(1.0, 1.0, 1.0).length()
         self.__goto(target)
         drift = self.position - target
-        logging.error("Drift-Management-after: Actual=%s, Target=%s, Drift=%s(%s)", self.position, target, drift, drift.length())
+        logging.debug("Drift-Management-after: Actual=%s, Target=%s, Drift=%s(%s)", self.position, target, drift, drift.length())
         assert drift.length() < Point3d(1.0, 1.0, 1.0).length()
 
     def __step(self, *args):
@@ -425,6 +425,7 @@ class Controller(object):
         so to move in both direction at the same time,
         parameter x or y has to be sometime float
         """
+        logging.info("%s called with %s", inspect.stack()[0][3], args)
         data = args[0]
         target = Point3d(0, 0, 0)
         for axis in ("X", "Y", "Z"):
