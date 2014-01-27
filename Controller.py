@@ -4,8 +4,6 @@
 # parse Gcode
 #
 
-import sys
-import re
 import logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 # import inspect
@@ -15,11 +13,6 @@ import time
 # own modules
 from Point3d import Point3d as Point3d
 
-# wait for keypress, or wait amount of time
-# AUTOMATIC = None
-AUTOMATIC = 0.01
-# pygame Zoom faktor
-ZOOM = 4
 
 class Controller(object):
     """
@@ -55,9 +48,14 @@ class Controller(object):
         # pygame specificas to draw correct
         self.pygame_zoom = 1
         self.pygame_draw = True
-        self.pygame_color = pygame.Color(255,255,255,255) 
+        self.pygame_color = pygame.Color(255, 255, 255, 255)
+        # define minimal arc step
+        self.angle_step = math.pi / 180 
+        self.angle_step_sin = math.sin(self.angle_step)
+        self.angle_step_cos = math.cos(self.angle_step)
 
     def get_position(self):
+        """return own position"""
         return(self.position)
 
     def get_direction(self, number):
@@ -65,28 +63,28 @@ class Controller(object):
         return(int(number/abs(number)))
 
     def add_spindle(self, spindle_object):
-        """ add spindle to controller """
+        """add spindle to controller"""
         self.spindle = spindle_object
 
     def add_motor(self, axis, motor_object):
-        """ add specific axis motor to controller """
+        """add specific axis motor to controller
+        axis should be named with capitalized letters of X, Y, Z"""
+        assert axis in ("X", "Y", "Z")
         self.motors[axis] = motor_object
 
     def G00(self, *args):
         """rapid motion with maximum speed"""
         #logging.info("G00 called with %s", args)
-        data = args[0]
         self.pygame_color = pygame.Color(50, 50, 50, 255)
-        self.move(data)
+        self.move(args[0])
     G0 = G00
 
     def G01(self, *args):
         """linear motion with given speed"""
         #logging.info("G01 called with %s", args)
-        data = args[0]
         self.pygame_color = pygame.Color(0, 128, 0, 255)
         # self.set_speed(data)
-        self.move(data)
+        self.move(args[0])
     G1 = G01
 
     def G02(self, *args):
@@ -94,10 +92,8 @@ class Controller(object):
         #logging.info("G02 called with %s", args)
         data = args[0]
         self.pygame_color = pygame.Color(0, 0, 255, 255)
-        if "F" not in data:
-            data["F"] = self.default_speed
-        if "P" not in data:
-            data["P"] = 1
+        data["F"] = self.default_speed if "F" not in data else data["F"]
+        data["P"] = 1 if "P" not in data else data["P"]
         assert type(data["P"]) == int
         self.__arc(data, -1)
     G2 = G02
@@ -107,10 +103,8 @@ class Controller(object):
         #logging.info("G03 called with %s", args)
         data = args[0]
         self.pygame_color = pygame.Color(0, 255, 255, 255)
-        if "F" not in data:
-            data["F"] = self.default_speed
-        if "P" not in data:
-            data["P"] = 1
+        data["F"] = self.default_speed if "F" not in data else data["F"]
+        data["P"] = 1 if "P" not in data else data["P"]
         assert type(data["P"]) == int
         self.__arc(data, 1)
     G3 = G03
@@ -118,8 +112,8 @@ class Controller(object):
     def G04(self, *args):
         """Dwell (no motion for P seconds)"""
         logging.info("G04 called with %s", args)
-        data = args[0]
-        time.sleep(data["P"])
+        if "P" in args[0]:
+            time.sleep(args[0]["P"])
     G4 = G04
 
     def G17(self, *args):
@@ -161,67 +155,56 @@ class Controller(object):
         logging.info("G94 called with %s", args)
 
     def M2(self, *args):
-        logging.debug("M2 called with %s", args)
-        logging.info("M2 end the program")
+        logging.debug("M2 end the program called with %s", args)
         # back to origin
         self.__goto(Point3d(0, 0, 0))
         # unhold everything
-        for axis, motor in self.motors.items():
+        for _, motor in self.motors.items():
             motor.unhold()
         # stop spindle
         self.spindle.unhold()
         raise StandardError("M02 received, end of prgram")
 
     def M3(self, *args):
-        logging.debug("M3 called with %s", args)
-        logging.info("M3 start the spindle clockwise at the speed S")
+        logging.debug("M3 start the spindle clockwise at speed S called with %s", args)
         data = args[0]
-        if "S" not in data :
-            self.spindle.rotate(self.spindle.CW)
-        else:
+        if "S" in data:
             self.spindle.rotate(self.spindle.CW, data["S"])
+        else: 
+            self.spindle.rotate(self.spindle.CW)
             
     def M4(self, *args):
-        logging.debug("M4 called with %s", args)
-        logging.info("M4 start the spindle counter-clockwise at the speed S")
+        logging.debug("M4 start the spindle counter-clockwise at speed S called with %s", args)
         data = args[0]
-        if "S" not in data :
-            self.spindle.rotate(self.spindle.CCW)
-        else:
+        if "S" in data:
             self.spindle.rotate(self.spindle.CCW, data["S"])
+        else: 
+            self.spindle.rotate(self.spindle.CCW)
 
     def M5(self, *args):
-        logging.debug("M5 called with %s", args)
-        logging.info("M5 stop the spindle")
-        data = args[0]
+        logging.debug("M5 stop the spindle called with %s", args)
         self.spindle.unhold()
 
     def M6(self, *args):
-        logging.debug("M6 called with %s", args)
-        logging.info("M6 Tool change")
+        logging.debug("M6 Tool change called with %s", args)
 
     def M7(self, *args):
-        logging.debug("M7 called with %s", args)
-        logging.info("M7 turn mist coolant on")
+        logging.debug("M7 turn mist coolant on called with %s", args)
 
     def M8(self, *args):
-        logging.debug("M8 called with %s", args)
-        logging.info("M8 turn flood coolant on")
+        logging.debug("M8 turn flood coolant on called with %s", args)
 
     def M9(self, *args):
-        logging.debug("M9 called with %s", args)
-        logging.info("M9 turn all coolant off")
+        logging.debug("M9 turn all collant off called with %s", args)
 
     def __get_center(self, target, radius):
+        """get center from target on circle and radius given"""
         logging.info("__get_center called with %s", (target, radius))
-        d = target - self.position
-        x = d.X
-        y = d.Y
-        r = radius
-        logging.info("x=%s, y=%s, r=%s", x, y, r)
-        h_x2_div_d = math.sqrt(4 * r**2 - x**2 - y**2) / math.sqrt(x**2 + y**2)
-        i = (x - (y * h_x2_div_d))/2
-        j = (y + (x * h_x2_div_d))/2
+        distance = target - self.position
+        # logging.info("x=%s, y=%s, r=%s", x, y, r)
+        h_x2_div_d = math.sqrt(4 * radius **2 - distance.X**2 - distance.Y**2) / math.sqrt(distance.X**2 + distance.Y**2)
+        i = (distance.X - (distance.Y * h_x2_div_d))/2
+        j = (distance.Y + (distance.X * h_x2_div_d))/2
         return(Point3d(i, j, 0.0))
 
     def __arc(self, *args):
@@ -256,7 +239,7 @@ class Controller(object):
         #logging.debug("Offset = %s", offset)
         center = self.position + offset
         #logging.debug("Center of arc at %s", center)
-        radius = offset.length()
+        # DELETE radius = offset.length()
         #logging.debug("Radius: %s", radius)
         # get the angle bewteen the two vectors
         target_vec = (target - center).unit()
@@ -269,7 +252,7 @@ class Controller(object):
         stop_angle = None
         angle_step = math.pi / 180
         # shortcut, if angle is very small, make a straight line
-        if abs(angle) <= angle_step:
+        if abs(angle) <= self.angle_step:
             self.__goto(target)
             return
         if ccw == 1:
@@ -304,8 +287,10 @@ class Controller(object):
         inv_offset = offset * -1
         #logging.debug("Inverse Offset vector : %s", inv_offset)
         angle = angle_step * angle_steps
+        cos_theta = math.cos(angle_step)
+        sin_theta = math.sin(angle_step)
         while abs(angle) > abs(angle_step):
-            inv_offset = inv_offset.rotated_Z(angle_step)
+            inv_offset = inv_offset.rotated_z_fast(angle_step, cos_theta, sin_theta)
             self.__goto(center + inv_offset)
             angle -= angle_step
             #logging.debug("angle=%s, start_angle=%s, stop_angle=%s", start_angle + angle, start_angle, stop_angle)
@@ -358,15 +343,12 @@ class Controller(object):
             #logging.info("move_vec is zero, nothing to draw")
             # no movement at all
             return
-        move_vec_unit = move_vec.unit()
         # steps on each axes to move
         # scale from mm to steps
         move_vec_steps = move_vec * self.resolution
         move_vec_steps_unit = move_vec_steps.unit()
         #logging.error("move_vec_steps_unit=%s", move_vec_steps_unit)
         #logging.error("scaled %s mm to %s steps", move_vec, move_vec_steps)
-        length_unit = move_vec_steps_unit.length()
-        length = move_vec_steps.length()
         #logging.error("move_vec_steps.length() = %s", move_vec_steps.length())        
         # use while loop the get to the exact value
         while move_vec_steps.length() > 1.0:
@@ -391,30 +373,23 @@ class Controller(object):
         #    motor_position / self.resolution, self.position - motor_position / self.resolution, self.spindle.get_state())
 
     def pygame_update(self, newposition):
-        pan_x = self.surface.get_width() / 2
-        pan_y = self.surface.get_height() / 2
-        start = (self.resolution* self.position.X, self.resolution * self.position.Y)
-        stop = (self.resolution * newposition.X, self.resolution * newposition.Y)
-        color = pygame.Color(0, 50, 0, 255)
-        if self.motors["Z"].position < 0:
-            color = pygame.Color(0, 0, 255, 255)
+        """draw on surface if available"""
         if self.pygame_draw:
+            start = (self.resolution* self.position.X, self.resolution * self.position.Y)
+            stop = (self.resolution * newposition.X, self.resolution * newposition.Y)
             pygame.draw.line(self.surface, self.pygame_color, start, stop, 1)
-        # set red dot at motor position
-        self.surface.set_at((self.motors["X"].position, self.motors["Y"].position), pygame.Color(255,0,0,255))
-        pygame.display.flip()
+            # set red dot at motor position
+            self.surface.set_at((self.motors["X"].position, self.motors["Y"].position), pygame.Color(255, 0, 0, 255))
+            pygame.display.flip()
 
     def set_speed(self, *args):
-        """
-        set speed, if data["F"] is given, defaults to default_speed if not specified
-        """
-        data = args[0]
-        if "F" in data:
-            self.speed = data["F"]
-        else:
+        """set speed, if data["F"] is given, defaults to default_speed if not specified"""
+        if "F" in args[0]:
+            self.speed = args[0]["F"]
+        else: 
             self.speed = self.default_speed
 
-    def move_inc(self, stepx, stepy):
+    def move_inc(self, *args):
         """
         incremental movement, parameter represents relative position change
         move to given x,y ccordinates
@@ -424,6 +399,8 @@ class Controller(object):
         parameter x or y has to be sometime float
         """
         #logging.info("move_inc called with %s", args)
+        if args[0] is None: 
+            return
         data = args[0]
         target = Point3d(0, 0, 0)
         for axis in ("X", "Y", "Z"):
@@ -442,8 +419,9 @@ class Controller(object):
         present, there is not movement on this axis
         """
         #logging.info("move_abs called with %s", args)
+        if args[0] is None: 
+            return
         data = args[0]
-        if data is None: return
         target = Point3d(0.0, 0.0, 0.0)
         for axis in ("X", "Y", "Z"):
             if axis in data:
@@ -454,9 +432,9 @@ class Controller(object):
         self.__goto(target)
 
     def __getattr__(self, name):
+        """handle unknwon methods"""
         def method(*args):
             logging.info("tried to handle unknown method " + name)
             if args:
                 logging.info("it had arguments: " + str(args))
         return method
-

@@ -4,14 +4,9 @@
 # parse Gcode
 #
 
-import sys
-import re
 import logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
-import inspect
 import math
-import pygame
-import time
 
 
 class Point3d(object):
@@ -63,6 +58,7 @@ class Point3d(object):
         self.Z /= scalar
 
     def length(self):
+        """return length of vector"""
         return(math.sqrt(self.X**2 + self.Y**2 + self.Z**2))
 
     def unit(self):
@@ -87,10 +83,20 @@ class Point3d(object):
         
         the returned vector is orthogonal to the plan a,b
         """
-        cx = self.Y * other.Z - self.Z * other.Y
-        cy = self.Z * other.X - self.X * other.Z
-        cz = self.X * other.Y - self.Y * other.X
-        return(Point3d(xy, cy, cz))
+        cross_x = self.Y * other.Z - self.Z * other.Y
+        cross_y = self.Z * other.X - self.X * other.Z
+        cross_z = self.X * other.Y - self.Y * other.X
+        return(Point3d(cross_x, cross_y, cross_z))
+
+    def rotated_z_fast(self, theta, cos_theta, sin_theta):
+        """
+        return rotated version of self around Z-Axis
+        faster version, with precalculated cos(theta) and sin(theta)
+        """
+        rotated_x = self.X * cos_theta - self.Y * sin_theta
+        rotated_y = self.X * sin_theta + self.Y * cos_theta
+        return(Point3d(rotated_x, rotated_y, self.Z))
+
 
     def rotated_Z(self, theta):
         """
@@ -101,10 +107,10 @@ class Point3d(object):
         |sin θ    cos θ   0| |y| = |x sin θ + y cos θ| = |y'|
         |  0       0      1| |z|   |        z        |   |z'|
         """
-        xr = self.X * math.cos(theta) - self.Y * math.sin(theta)
-        yr = self.X * math.sin(theta) + self.Y * math.cos(theta)
-        zr = self.Z
-        return(Point3d(xr, yr, zr))
+        rotated_x = self.X * math.cos(theta) - self.Y * math.sin(theta)
+        rotated_y = self.X * math.sin(theta) + self.Y * math.cos(theta)
+        rotated_z = self.Z
+        return(Point3d(rotated_x, rotated_y, rotated_z))
 
     def rotated_Y(self, theta):
         """
@@ -115,10 +121,10 @@ class Point3d(object):
         |   0      1       0| |y| = |         y        | = |y'|
         |-sin θ    0   cos θ| |z|   |-x sin θ + z cos θ|   |z'|
         """
-        xr = self.X * math.cos(theta) + self.Z * math.sin(theta)
-        yr = self.Y
-        zr = (-1) * self.X * math.sin(theta) + self.Z * math.cos(theta)
-        return(Point3d(xr, yr, zr))
+        rotated_x = self.X * math.cos(theta) + self.Z * math.sin(theta)
+        rotated_y = self.Y
+        rotated_z = (-1) * self.X * math.sin(theta) + self.Z * math.cos(theta)
+        return(Point3d(rotated_x, rotated_y, rotated_z))
 
     def rotated_X(self, theta):
         """
@@ -129,10 +135,10 @@ class Point3d(object):
         |0   cos θ    -sin θ| |y| = |y cos θ - z sin θ| = |y'|
         |0   sin θ     cos θ| |z|   |y sin θ + z cos θ|   |z'|
         """
-        xr = self.X
-        yr = self.Y * math.cos(theta) - self.Z * math.sin(theta)
-        zr = self.Y * math.sin(theta) + self.Z * math.cos(theta)
-        return(Point3d(xr, yr, zr))
+        rotated_x = self.X
+        rotated_y = self.Y * math.cos(theta) - self.Z * math.sin(theta)
+        rotated_z = self.Y * math.sin(theta) + self.Z * math.cos(theta)
+        return(Point3d(rotated_x, rotated_y, rotated_z))
 
     def dot(self, other):
         """
@@ -144,7 +150,6 @@ class Point3d(object):
         """
         which angle does this vector has, from his origin
         """
-        add_angle = 0
         # corect angle if in 3rd or 4th quadrant
         if self.Y < 0 :
             return(2 * math.pi - math.acos(self.X))

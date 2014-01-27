@@ -11,24 +11,16 @@ try:
 except ImportError:
     logging.error("Semms not be a RaspberryPi")
     from  FakeGPIO import FakeGPIO as GPIO
-import sys
 import re
-# import inspect
 import pygame
-import time
 # own modules
-from Motor import Motor as Motor
 from Motor import BipolarStepperMotor as BipolarStepperMotor
 from Motor import LaserMotor as LaserMotor
 from Spindle import Spindle as Spindle
-from Spindle import Laser as Laser
 from Controller import Controller as Controller
 
 # wait for keypress, or wait amount of time
-AUTOMATIC = None
-AUTOMATIC = 0.01
-# pygame Zoom faktor
-ZOOM = 4
+AUTOMATIC = True
 
 class Parser(object):
     """
@@ -41,11 +33,9 @@ class Parser(object):
         self.controller = Controller(surface=surface, resolution=512/36, default_speed=1.0, delay=1)
         self.controller.add_motor("X", BipolarStepperMotor(coils=(4, 2, 27, 22), max_position=512, min_position=0))
         self.controller.add_motor("Y", BipolarStepperMotor(coils=(24, 25, 7, 8), max_position=512, min_position=0))
-        #self.controller.add_motor("X", Motor())
-        #self.controller.add_motor("Y", Motor())
         self.controller.add_motor("Z", LaserMotor(laser_pin=14, min_position=-10000, max_position=10000))
         self.controller.add_spindle(Spindle())
-        #self.controller.add_spindle(Spindle())
+        # last known g code
         self.last_g_code = None
         # draw grid
         if self.surface is not None:
@@ -108,7 +98,7 @@ class Parser(object):
 
         fo example G02 results in call of self.controller.G02(args)
         """
-        logging.info("Methodname = %s" % methodname)
+        # logging.info("Methodname = %s" % methodname)
         if methodname is None:
             methodname = self.last_g_code
         else:
@@ -159,21 +149,22 @@ class Parser(object):
                 self.caller(gcode, parameters)
             else:
                 logging.debug("No G-Code on this line assuming last modal G-Code %s" % self.last_g_code)
-                result = self.parse_xyzijf(line)
+                result = self.parse_g_params(line)
                 self.caller(methodname=None, args=result)
-            # pygame drawing and pause after each step
+            # pygame drawing if surface is available
             if self.surface is not None:
                 pygame.display.flip()
             # automatic stepping or keypress
-            if AUTOMATIC is not None:
-                time.sleep(AUTOMATIC)
-            else:
-                while (pygame.event.wait().type != pygame.KEYDOWN): pass
+            if AUTOMATIC is not True:
+                while (pygame.event.wait().type != pygame.KEYDOWN):
+                    pass
         # wait for keypress
-        while (pygame.event.wait().type != pygame.KEYDOWN): pass
+        while (pygame.event.wait().type != pygame.KEYDOWN):
+            pass
 
 
 def safe_position():
+    """safe GPIO Pin Position, everything LOW"""
     for pin in (4, 2, 27, 22, 23, 14, 24, 25, 7, 8):
         GPIO.setup(pin, GPIO.OUT)
         GPIO.output(pin, 0)

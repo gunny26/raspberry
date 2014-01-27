@@ -47,18 +47,16 @@ def main():
         logging.info("Initializing all GPIO Pins, and set state LOW")
         safe_position()
         logging.info("Please move positions to origin")
-        key = raw_input("Press any KEY when done")
         logging.info("Initialize GPIO Modes")
         GPIO.setup(23, GPIO.OUT)
         GPIO.output(23, 1)
         GPIO.setup(14, GPIO.OUT)
         GPIO.output(14, 0)
-        key = raw_input("Press and KEY to start parsing")
         pygame.init()
         surface = pygame.display.set_mode((530, 530))
         surface.fill((0, 0, 0))
         pygame.display.flip()
-        parser = Parser(surface=surface)
+        parser = Parser(surface=None)
         parser.read()
     except Exception, exc:
         logging.exception(exc)
@@ -74,6 +72,7 @@ if __name__ == "__main__":
     s = pstats.Stats(profile)
     s.sort_stats('tottime')
     s.print_stats()
+    key = raw_input("Press any key")
     tracer = trace.Trace( 
         ignoredirs = [sys.prefix, sys.exec_prefix], 
         trace = 0) 

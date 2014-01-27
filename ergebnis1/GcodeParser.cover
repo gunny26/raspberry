@@ -25,8 +25,7 @@
 >>>>>> from Controller import Controller as Controller
        
        # wait for keypress, or wait amount of time
->>>>>> AUTOMATIC = None
->>>>>> AUTOMATIC = 0.01
+>>>>>> AUTOMATIC = True
        # pygame Zoom faktor
 >>>>>> ZOOM = 4
        
@@ -49,7 +48,7 @@
     1:         self.last_g_code = None
                # draw grid
     1:         if self.surface is not None:
-    1:             self.draw_grid()
+>>>>>>             self.draw_grid()
                # precompile regular expressions
     1:         self.rex_g = {}
     1:         self.g_params = ("X", "Y", "Z", "F", "I", "J", "K", "P", "R")
@@ -69,18 +68,18 @@
                surface.X : self.motors["X"].min_position <-> surface.get_width() = self.motors["X"].max_position
                surface.Y : self.motors["Y"].min_position <-> surface.get_height() = self.motors["Y"].max_position
                """
-    1:         color = pygame.Color(0, 50, 0, 255)
-   54:         for x in range(0, self.surface.get_height(), 10):
-   53:             pygame.draw.line(self.surface, color, (x, 0), (x, self.surface.get_height()), 1)
-   54:         for y in range(0, self.surface.get_width(), 10):
-   53:             pygame.draw.line(self.surface, color, (0, y), (self.surface.get_width(), y), 1)
-    1:         color = pygame.Color(0, 100, 0, 255)
-    1:         pygame.draw.line(self.surface, color, (self.surface.get_width() / 2, 0), (self.surface.get_width() / 2, self.surface.get_height()))
-    1:         pygame.draw.line(self.surface, color, (0, self.surface.get_height() / 2), (self.surface.get_width(), self.surface.get_height() / 2))
+>>>>>>         color = pygame.Color(0, 50, 0, 255)
+>>>>>>         for x in range(0, self.surface.get_height(), 10):
+>>>>>>             pygame.draw.line(self.surface, color, (x, 0), (x, self.surface.get_height()), 1)
+>>>>>>         for y in range(0, self.surface.get_width(), 10):
+>>>>>>             pygame.draw.line(self.surface, color, (0, y), (self.surface.get_width(), y), 1)
+>>>>>>         color = pygame.Color(0, 100, 0, 255)
+>>>>>>         pygame.draw.line(self.surface, color, (self.surface.get_width() / 2, 0), (self.surface.get_width() / 2, self.surface.get_height()))
+>>>>>>         pygame.draw.line(self.surface, color, (0, self.surface.get_height() / 2), (self.surface.get_width(), self.surface.get_height() / 2))
                # draw motor scales
-    1:         color = pygame.Color(100, 0, 0, 255)
-    1:         pygame.draw.line(self.surface, color, (self.surface.get_width() - 10, 0), (self.surface.get_width() - 10, self.surface.get_height()))
-    1:         pygame.draw.line(self.surface, color, (0, self.surface.get_height() - 10), (self.surface.get_width(), self.surface.get_height() - 10))
+>>>>>>         color = pygame.Color(100, 0, 0, 255)
+>>>>>>         pygame.draw.line(self.surface, color, (self.surface.get_width() - 10, 0), (self.surface.get_width() - 10, self.surface.get_height()))
+>>>>>>         pygame.draw.line(self.surface, color, (0, self.surface.get_height() - 10), (self.surface.get_width(), self.surface.get_height() - 10))
        
 >>>>>>     def parse_g_params(self, line):
                """parse known Parameters to G-Commands"""
@@ -108,7 +107,7 @@
        
                fo example G02 results in call of self.controller.G02(args)
                """
- 1293:         logging.info("Methodname = %s" % methodname)
+               # logging.info("Methodname = %s" % methodname)
  1293:         if methodname is None:
 >>>>>>             methodname = self.last_g_code
                else:
@@ -163,11 +162,9 @@
 >>>>>>                 self.caller(methodname=None, args=result)
                    # pygame drawing and pause after each step
  1290:             if self.surface is not None:
- 1290:                 pygame.display.flip()
+>>>>>>                 pygame.display.flip()
                    # automatic stepping or keypress
- 1290:             if AUTOMATIC is not None:
- 1290:                 time.sleep(AUTOMATIC)
-                   else:
+ 1290:             if AUTOMATIC is not True:
 >>>>>>                 while (pygame.event.wait().type != pygame.KEYDOWN): pass
                # wait for keypress
 >>>>>>         while (pygame.event.wait().type != pygame.KEYDOWN): pass
