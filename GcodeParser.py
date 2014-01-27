@@ -27,7 +27,7 @@ class Parser(object):
     Class to parse GCode Text Commands
     """
 
-    def __init__(self, surface):
+    def __init__(self, surface, filename):
         self.surface = surface
         # build our controller
         self.controller = Controller(surface=surface, resolution=512/36, default_speed=1.0, delay=0.0)
@@ -110,7 +110,7 @@ class Parser(object):
         """
         read input file line by line, and parse gcode Commands
         """
-        for line in open("output_0005.ngc", "rb"):
+        for line in open("uni_logo_0005.ngc", "rb"):
             # cleanup line
             line = line.strip()
             line = line.upper()
@@ -188,7 +188,7 @@ def main():
         #surface = pygame.display.set_mode((530, 530))
         #surface.fill((0, 0, 0))
         #pygame.display.flip()
-        parser = Parser(surface=None)
+        parser = Parser(surface=None, sys.argv[1])
         parser.read()
     except Exception, exc:
         logging.exception(exc)
