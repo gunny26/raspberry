@@ -23,7 +23,7 @@ class Controller(object):
     Spindle -> could be also a laser or something else
     """
 
-    def __init__(self, surface, resolution=1.0, default_speed=1.0, delay=100):
+    def __init__(self, surface, resolution=1.0, default_speed=1.0, delay=0.0):
         """
         initialize Controller Object
         @param
@@ -34,9 +34,11 @@ class Controller(object):
         self.default_speed = default_speed
         self.resolution = resolution
         self.surface = surface
-        self.delay = delay / 10000 # in ms
+        self.delay = float(delay) / 1000 # in ms
         # initialize position
         self.position = Point3d(0, 0, 0)
+        # timemark of last stepping
+        self.last_step_time = time.time()
         # defaults to absolute movements
         self.move = self.move_abs
         # defaults to millimeter
@@ -163,7 +165,7 @@ class Controller(object):
             motor.unhold()
         # stop spindle
         self.spindle.unhold()
-        raise StandardError("M02 received, end of prgram")
+        raise StandardError("M02 received, end of program")
 
     def M3(self, *args):
         logging.debug("M3 start the spindle clockwise at speed S called with %s", args)

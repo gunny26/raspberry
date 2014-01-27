@@ -13,6 +13,7 @@ except ImportError:
     from FakeGPIO import FakeGPIO as GPIO
 import logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
+import time
 
 class Motor(object):
     """
@@ -20,12 +21,15 @@ class Motor(object):
     usually you have to overwrite __move and unhold methods
     """
 
-    def __init__(self, max_position, min_position):
+    def __init__(self, max_position, min_position, delay):
         self.max_position = max_position
         self.min_position = min_position
+        self.delay = delay
         # define
         self.position = 0
         self.float_position = 0.0
+        # timekeeping
+        self.last_step_time = time.time()
 
     def move_float(self, direction, float_step):
         """
@@ -36,6 +40,10 @@ class Motor(object):
         assert type(direction) == int
         assert (direction == -1) or (direction == 1)
         assert 0.0 <= float_step <= 1.0
+        # next step should not before self.last_step_time + self.delay
+        time_gap = self.last_step_time + self.delay - time.time()
+        if time_gap > 0:
+            time.sleep(time_gap)
         self.float_position += (float_step * direction)
         distance = abs(self.position - self.float_position)
         if distance >= 1.0:
@@ -43,6 +51,8 @@ class Motor(object):
             self._move(direction)
         #else:
             #logging.debug("distance %s to small to initialize full step", distance)
+        # remember last_step_time
+        self.last_step_time = time.time()
         distance = abs(self.float_position - self.position)
         #logging.debug("int_position = %d : float_position = %f : distance = %f", self.position, self.float_position, distance)
         # final distance between exact float and real int must be lesser than 1.0
@@ -73,8 +83,8 @@ class Motor(object):
 class LaserMotor(Motor):
     """Laser Motor, reactive if axis moves negative"""
 
-    def __init__(self, laser_pin, max_position, min_position):
-        Motor.__init__(self, max_position, min_position)
+    def __init__(self, laser_pin, max_position, min_position, delay):
+        Motor.__init__(self, max_position, min_position, delay)
         self.laser_pin = laser_pin
         GPIO.setup(self.laser_pin, GPIO.OUT)
         GPIO.setup(self.laser_pin, 0)
@@ -140,9 +150,9 @@ class BipolarStepperMotor(Motor):
     # ok
     SEQUENCE = SEQUENCE_MIXED
 
-    def __init__(self, coils, max_position, min_position):
+    def __init__(self, coils, max_position, min_position, delay):
         """init"""
-        Motor.__init__(self, max_position, min_position)
+        Motor.__init__(self, max_position, min_position, delay)
         self.coils = coils
         # define coil pins as output
         for pin in self.coils:

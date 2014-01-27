@@ -5,7 +5,7 @@
 #
 
 import logging
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+logging.basicConfig(level=logging.DEBUG, format="%(message)s")
 try:
     import RPi.GPIO as GPIO
 except ImportError:
@@ -30,10 +30,10 @@ class Parser(object):
     def __init__(self, surface):
         self.surface = surface
         # build our controller
-        self.controller = Controller(surface=surface, resolution=512/36, default_speed=1.0, delay=1)
-        self.controller.add_motor("X", BipolarStepperMotor(coils=(4, 2, 27, 22), max_position=512, min_position=0))
-        self.controller.add_motor("Y", BipolarStepperMotor(coils=(24, 25, 7, 8), max_position=512, min_position=0))
-        self.controller.add_motor("Z", LaserMotor(laser_pin=14, min_position=-10000, max_position=10000))
+        self.controller = Controller(surface=surface, resolution=512/36, default_speed=1.0, delay=0.0)
+        self.controller.add_motor("X", BipolarStepperMotor(coils=(4, 2, 27, 22), max_position=512, min_position=0, delay=0.030))
+        self.controller.add_motor("Y", BipolarStepperMotor(coils=(24, 25, 7, 8), max_position=512, min_position=0, delay=0.030))
+        self.controller.add_motor("Z", LaserMotor(laser_pin=14, min_position=-10000, max_position=10000, delay=0.0))
         self.controller.add_spindle(Spindle())
         # last known g code
         self.last_g_code = None
@@ -184,11 +184,11 @@ def main():
         GPIO.setup(14, GPIO.OUT)
         GPIO.output(14, 0)
         key = raw_input("Press and KEY to start parsing")
-        pygame.init()
-        surface = pygame.display.set_mode((530, 530))
-        surface.fill((0, 0, 0))
-        pygame.display.flip()
-        parser = Parser(surface=surface)
+        #pygame.init()
+        #surface = pygame.display.set_mode((530, 530))
+        #surface.fill((0, 0, 0))
+        #pygame.display.flip()
+        parser = Parser(surface=None)
         parser.read()
     except Exception, exc:
         logging.exception(exc)
